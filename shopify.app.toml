@@ -1,0 +1,38 @@
+# Mango Product Feed - Shopify Embedded App
+
+name = "Mango Product Feed"
+client_id = "YOUR_CLIENT_ID"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,write_products,read_inventory,read_content"
+
+[auth]
+redirect_urls = [ "https://example.com/auth/callback" ]
+
+[webhooks]
+api_version = "2025-01"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "shop/update" ]
+  uri = "/webhooks/app/installed"
+
+  [[webhooks.subscriptions]]
+  topics = [ "products/create" ]
+  uri = "/webhooks/products/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "products/update" ]
+  uri = "/webhooks/products/update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "products/delete" ]
+  uri = "/webhooks/products/delete"
+
+[build]
+include_config_on_deploy = true

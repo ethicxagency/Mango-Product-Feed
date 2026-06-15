@@ -1,0 +1,443 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Availability {
+  IN_STOCK
+  OUT_OF_STOCK
+  PREORDER
+}
+
+enum FeedType {
+  GOOGLE
+  META
+  TIKTOK
+  PINTEREST
+  SNAPCHAT
+  CUSTOM
+}
+
+enum FeedRequestStatus {
+  SUCCESS
+  ERROR
+}
+
+enum FeedFilterMode {
+  ALL
+  PRODUCTS
+  CATEGORIES
+  BRANDS
+  PRODUCT_TYPES
+}
+
+enum FeedSchedule {
+  MANUAL
+  HOURLY
+  DAILY
+  WEEKLY
+}
+
+enum RuleConditionField {
+  STOCK
+  CATEGORY
+  PRICE
+  BRAND
+  PRODUCT_TYPE
+  SKU
+  COUNTRY
+}
+
+enum RuleConditionOperator {
+  EQ
+  NEQ
+  LT
+  LTE
+  GT
+  GTE
+  CONTAINS
+}
+
+enum RuleAction {
+  EXCLUDE
+  APPEND_TEXT
+}
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING
+  CANCELLED
+  EXPIRED
+}
+
+enum SyncMode {
+  MANUAL
+  AUTOMATIC
+}
+
+enum SyncStatus {
+  IDLE
+  RUNNING
+  SUCCESS
+  ERROR
+}
+
+enum CategoryMappingPlatform {
+  GOOGLE
+  META
+  TIKTOK
+  PINTEREST
+  SNAPCHAT
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  VIEWER
+}
+
+enum NotificationType {
+  FEED_ERROR
+  FEED_EXPIRY
+  SYNC_FAILURE
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum SystemLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+enum AiOptimizationType {
+  TITLE
+  DESCRIPTION
+  HEALTH_SUGGESTION
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  @@map("sessions")
+}
+
+model Shop {
+  id              String           @id @default(cuid())
+  shopDomain      String           @unique @map("shop_domain")
+  name            String?
+  email           String?
+  plan            SubscriptionPlan @default(FREE)
+  syncMode        SyncMode         @default(MANUAL) @map("sync_mode")
+  syncStatus      SyncStatus       @default(IDLE) @map("sync_status")
+  lastSyncedAt    DateTime?        @map("last_synced_at")
+  initialSyncDone Boolean          @default(false) @map("initial_sync_done")
+  installedAt     DateTime         @default(now()) @map("installed_at")
+  uninstalledAt   DateTime?        @map("uninstalled_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  products        Product[]
+  feedConfigs     FeedConfig[]
+  subscriptions   Subscription[]
+  categoryMappings CategoryMapping[]
+  productExclusions ProductExclusion[]
+  notificationPreferences NotificationPreference[]
+
+  @@map("shops")
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  shopId           String             @map("shop_id")
+  shop             Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  plan             SubscriptionPlan
+  status           SubscriptionStatus @default(PENDING)
+  shopifyChargeId  String?            @map("shopify_charge_id")
+  shopifyChargeUrl String?            @map("shopify_charge_url")
+  price            Decimal            @default(0)
+  trialDays        Int                @default(0) @map("trial_days")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  @@index([shopId, status])
+  @@map("subscriptions")
+}
+
+model Product {
+  id                String       @id @default(cuid())
+  shopId            String?      @map("shop_id")
+  shop              Shop?        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopifyProductId  String?      @map("shopify_product_id")
+  shopifyVariantId  String?      @map("shopify_variant_id")
+  title             String
+  description       String
+  sku               String
+  gtin              String?
+  brand             String
+  category          String
+  productType       String       @map("product_type")
+  price             Decimal
+  salePrice         Decimal?     @map("sale_price")
+  currencyCode      String       @default("USD") @map("currency_code")
+  countryCode       String?      @map("country_code")
+  availability      Availability @default(IN_STOCK)
+  imageUrl          String       @map("image_url")
+  productUrl        String       @map("product_url")
+  aiOptimizedTitle  String?      @map("ai_optimized_title")
+  aiOptimizedDescription String? @map("ai_optimized_description")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  aiOptimizations   AiOptimization[]
+
+  @@unique([shopId, sku])
+  @@unique([shopId, shopifyVariantId])
+  @@index([category])
+  @@index([brand])
+  @@index([productType])
+  @@index([shopId])
+  @@index([countryCode])
+  @@map("products")
+}
+
+model FeedRequest {
+  id           String            @id @default(cuid())
+  feedType     FeedType          @map("feed_type")
+  status       FeedRequestStatus @default(SUCCESS)
+  productCount Int               @default(0) @map("product_count")
+  errorMessage String?           @map("error_message")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  @@index([feedType, createdAt])
+  @@map("feed_requests")
+}
+
+model FeedTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  feedType    FeedType @map("feed_type")
+  itemTemplate String  @map("item_template")
+  headerTemplate String @default("") @map("header_template")
+  footerTemplate String @default("") @map("footer_template")
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  feedConfigs FeedConfig[]
+
+  @@index([feedType])
+  @@map("feed_templates")
+}
+
+model FeedConfig {
+  id              String         @id @default(cuid())
+  shopId          String?        @map("shop_id")
+  shop            Shop?          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name            String
+  feedType        FeedType       @map("feed_type")
+  token           String         @unique
+  isDefault       Boolean        @default(false) @map("is_default")
+  filterMode      FeedFilterMode @default(ALL) @map("filter_mode")
+  filterValues    String         @default("[]") @map("filter_values")
+  schedule        FeedSchedule   @default(MANUAL)
+  isActive        Boolean        @default(true) @map("is_active")
+  currencyCode    String         @default("USD") @map("currency_code")
+  targetCountry   String?        @map("target_country")
+  templateId      String?        @map("template_id")
+  template        FeedTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  customXmlTemplate String?      @map("custom_xml_template")
+  expiresAt       DateTime?      @map("expires_at")
+  lastGeneratedAt DateTime?      @map("last_generated_at")
+  lastAccessedAt  DateTime?      @map("last_accessed_at")
+  requestCount    Int            @default(0) @map("request_count")
+  downloadCount   Int            @default(0) @map("download_count")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  rules           FeedRule[]
+  logs            FeedLog[]
+
+  @@index([feedType, isDefault])
+  @@index([feedType, isActive])
+  @@index([shopId])
+  @@index([targetCountry])
+  @@map("feed_configs")
+}
+
+model FeedRule {
+  id                String              @id @default(cuid())
+  feedConfigId      String              @map("feed_config_id")
+  feedConfig        FeedConfig          @relation(fields: [feedConfigId], references: [id], onDelete: Cascade)
+  name              String
+  conditionField    RuleConditionField  @map("condition_field")
+  conditionOperator RuleConditionOperator @map("condition_operator")
+  conditionValue    String              @map("condition_value")
+  action            RuleAction
+  actionValue       String?             @map("action_value")
+  priority          Int                 @default(0)
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  @@index([feedConfigId, priority])
+  @@map("feed_rules")
+}
+
+model FeedLog {
+  id             String            @id @default(cuid())
+  feedConfigId   String?           @map("feed_config_id")
+  feedConfig     FeedConfig?       @relation(fields: [feedConfigId], references: [id], onDelete: SetNull)
+  feedName       String            @map("feed_name")
+  feedType       FeedType          @map("feed_type")
+  status         FeedRequestStatus @default(SUCCESS)
+  responseTimeMs Int               @map("response_time_ms")
+  productCount   Int               @default(0) @map("product_count")
+  isDownload     Boolean           @default(false) @map("is_download")
+  token          String?
+  userAgent      String?           @map("user_agent")
+  errorMessage   String?           @map("error_message")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([feedConfigId, createdAt])
+  @@index([createdAt])
+  @@index([feedType, createdAt])
+  @@map("feed_logs")
+}
+
+model CategoryMapping {
+  id              String                @id @default(cuid())
+  shopId          String                @map("shop_id")
+  shop            Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  platform        CategoryMappingPlatform
+  sourceCategory  String                @map("source_category")
+  targetCategory  String                @map("target_category")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  @@unique([shopId, platform, sourceCategory])
+  @@index([shopId, platform])
+  @@map("category_mappings")
+}
+
+model ProductExclusion {
+  id              String              @id @default(cuid())
+  shopId          String              @map("shop_id")
+  shop            Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name            String
+  conditionField  RuleConditionField  @map("condition_field")
+  conditionOperator RuleConditionOperator @map("condition_operator")
+  conditionValue  String              @map("condition_value")
+  isActive        Boolean             @default(true) @map("is_active")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  @@index([shopId, isActive])
+  @@map("product_exclusions")
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(ADMIN)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+model NotificationPreference {
+  id        String           @id @default(cuid())
+  shopId    String           @map("shop_id")
+  shop      Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  email     String
+  isEnabled Boolean          @default(true) @map("is_enabled")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  @@unique([shopId, type, email])
+  @@map("notification_preferences")
+}
+
+model NotificationLog {
+  id        String             @id @default(cuid())
+  shopId    String?            @map("shop_id")
+  type      NotificationType
+  email     String
+  subject   String
+  body      String
+  status    NotificationStatus @default(PENDING)
+  error     String?
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  @@index([shopId, createdAt])
+  @@index([type, createdAt])
+  @@map("notification_logs")
+}
+
+model SystemLog {
+  id        String         @id @default(cuid())
+  level     SystemLogLevel @default(INFO)
+  category  String
+  message   String
+  metadata  String         @default("{}")
+  shopId    String?        @map("shop_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@index([level, createdAt])
+  @@index([category, createdAt])
+  @@index([shopId, createdAt])
+  @@map("system_logs")
+}
+
+model AiOptimization {
+  id        String             @id @default(cuid())
+  productId String             @map("product_id")
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      AiOptimizationType
+  input     String
+  output    String
+  model     String?
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  @@index([productId, type])
+  @@map("ai_optimizations")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
