@@ -1,15 +1,18 @@
 # Mango Product Feed - Shopify Embedded App
 
 name = "Mango Product Feed"
-client_id = "YOUR_CLIENT_ID"
-application_url = "https://example.com"
+client_id = "133b57713a5ec35408555486ad242555"
+application_url = "https://mango-product-feed.onrender.com"
 embedded = true
 
 [access_scopes]
 scopes = "read_products,write_products,read_inventory,read_content"
 
 [auth]
-redirect_urls = [ "https://example.com/auth/callback" ]
+redirect_urls = [
+  "https://mango-product-feed.onrender.com/auth/callback",
+  "https://mango-product-feed.onrender.com/auth/shopify/callback",
+]
 
 [webhooks]
 api_version = "2025-01"

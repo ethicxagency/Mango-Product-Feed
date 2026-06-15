@@ -1,0 +1,40 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: mango-product-feed
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm run render-start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_URL
+        value: https://mango-product-feed.onrender.com
+      - key: SHOPIFY_APP_URL
+        value: https://mango-product-feed.onrender.com
+      - key: SHOPIFY_API_KEY
+        sync: false
+      - key: SHOPIFY_API_SECRET
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mango-product-feed-db
+          property: connectionString
+      - key: SCOPES
+        value: read_products,write_products,read_inventory,read_content
+      - key: LOCAL_SHOP_ID
+        value: local-shop
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+databases:
+  - name: mango-product-feed-db
+    plan: starter
+    region: oregon
+    databaseName: mango_feed
+    user: mango

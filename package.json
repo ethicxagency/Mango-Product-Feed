@@ -7,6 +7,8 @@
     "dev:local": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "setup": "prisma generate && prisma migrate deploy && prisma db seed",
+    "setup:prod": "prisma generate && prisma db push",
+    "render-start": "npm run setup:prod && npm run start",
     "docker-start": "npm run setup && npm run start",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
