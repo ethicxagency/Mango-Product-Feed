@@ -38,4 +38,3 @@ api_version = "2025-01"
   uri = "/webhooks/products/delete"
 
 [build]
-include_config_on_deploy = true
