@@ -10,18 +10,20 @@ import {
   handleShopInstalled,
   markShopUninstalled,
 } from "./services/shop.server";
+import { getShopifyEnv } from "./utils/shopify-env.server";
 
-export const isShopifyEnabled = Boolean(
-  process.env.SHOPIFY_API_KEY && process.env.SHOPIFY_API_SECRET,
-);
+type ShopifyApp = ReturnType<typeof shopifyApp>;
+
+let shopifyInstance: ShopifyApp | null | undefined;
 
 function createShopify() {
+  const env = getShopifyEnv();
   return shopifyApp({
-    apiKey: process.env.SHOPIFY_API_KEY!,
-    apiSecretKey: process.env.SHOPIFY_API_SECRET!,
+    apiKey: env.apiKey,
+    apiSecretKey: env.apiSecret,
     apiVersion: ApiVersion.January25,
-    scopes: process.env.SCOPES?.split(","),
-    appUrl: process.env.SHOPIFY_APP_URL || process.env.APP_URL || "",
+    scopes: env.scopes,
+    appUrl: env.appUrl,
     authPathPrefix: "/auth",
     sessionStorage: new PrismaSessionStorage(prisma),
     distribution: AppDistribution.AppStore,
@@ -33,55 +35,85 @@ function createShopify() {
   });
 }
 
-let shopify = isShopifyEnabled ? createShopify() : null;
+function getShopifyApp(): ShopifyApp | null {
+  const env = getShopifyEnv();
+  if (!env.isConfigured) {
+    shopifyInstance = null;
+    return null;
+  }
+  if (shopifyInstance === undefined) {
+    shopifyInstance = createShopify();
+  }
+  return shopifyInstance;
+}
+
+export function isShopifyEnabled(): boolean {
+  return getShopifyEnv().isConfigured;
+}
 
 function requireShopify() {
-  if (!shopify) {
+  const app = getShopifyApp();
+  if (!app) {
+    const missing = [
+      !process.env.SHOPIFY_API_KEY?.trim() && "SHOPIFY_API_KEY",
+      !process.env.SHOPIFY_API_SECRET?.trim() &&
+        !process.env.SHOPIFY_API_SECRET_KEY?.trim() &&
+        "SHOPIFY_API_SECRET",
+      !process.env.SHOPIFY_APP_URL?.trim() &&
+        !process.env.APP_URL?.trim() &&
+        "SHOPIFY_APP_URL",
+    ]
+      .filter(Boolean)
+      .join(", ");
+
     throw new Response(
-      "Shopify is not configured. Set SHOPIFY_API_KEY and SHOPIFY_API_SECRET, or use npm run dev:local for standalone mode.",
+      `Shopify is not configured. Missing: ${missing || "unknown"}. Add them in Render → Environment and redeploy.`,
       { status: 503 },
     );
   }
-  return shopify;
+  return app;
 }
 
-export default shopify;
+export default null;
 export const apiVersion = ApiVersion.January25;
 
 export function addDocumentResponseHeaders(
   request: Request,
   responseHeaders: Headers,
 ) {
-  if (shopify) {
-    shopify.addDocumentResponseHeaders(request, responseHeaders);
+  const app = getShopifyApp();
+  if (app) {
+    app.addDocumentResponseHeaders(request, responseHeaders);
   }
 }
 
 export const authenticate = {
-  admin: (...args: Parameters<ReturnType<typeof createShopify>["authenticate"]["admin"]>) =>
+  admin: (...args: Parameters<ShopifyApp["authenticate"]["admin"]>) =>
     requireShopify().authenticate.admin(...args),
   get public() {
     return requireShopify().authenticate.public;
   },
-  webhook: (...args: Parameters<ReturnType<typeof createShopify>["authenticate"]["webhook"]>) =>
+  webhook: (...args: Parameters<ShopifyApp["authenticate"]["webhook"]>) =>
     requireShopify().authenticate.webhook(...args),
 };
 
 export const unauthenticated = {
-  admin: (...args: Parameters<ReturnType<typeof createShopify>["unauthenticated"]["admin"]>) =>
+  admin: (...args: Parameters<ShopifyApp["unauthenticated"]["admin"]>) =>
     requireShopify().unauthenticated.admin(...args),
 };
 
-export const login = (...args: Parameters<ReturnType<typeof createShopify>["login"]>) =>
+export const login = (...args: Parameters<ShopifyApp["login"]>) =>
   requireShopify().login(...args);
 
 export const registerWebhooks = (
-  ...args: Parameters<ReturnType<typeof createShopify>["registerWebhooks"]>
+  ...args: Parameters<ShopifyApp["registerWebhooks"]>
 ) => requireShopify().registerWebhooks(...args);
 
-export const sessionStorage = isShopifyEnabled
-  ? new PrismaSessionStorage(prisma)
-  : null;
+export function getSessionStorage() {
+  return isShopifyEnabled() ? new PrismaSessionStorage(prisma) : null;
+}
+
+export const sessionStorage = getSessionStorage();
 
 export async function handleAppUninstalled(shopDomain: string) {
   await markShopUninstalled(normalizeShopDomain(shopDomain));
