@@ -1,26 +1,53 @@
 # Render production setup
 
-## Required environment variables
+## Render Dashboard settings
 
-In **Render Dashboard → mango-product-feed → Environment**, set:
+**Web service → Settings**
+
+| Setting | Value |
+|---------|--------|
+| **Region** | Singapore (same as your PostgreSQL) |
+| **Build Command** | `npm ci --include=dev && npx prisma generate && npm run build` |
+| **Start Command** | `npm run render-start` |
+| **Health Check Path** | `/health` |
+
+## Environment variables
+
+Set in **Render Dashboard → mango-product-feed → Environment**:
 
 | Variable | Value |
 |----------|--------|
-| `SHOPIFY_API_SECRET` | From Shopify Partners → App → Client credentials |
-| `DATABASE_URL` | From linked PostgreSQL service (Internal URL) |
-| `SHOPIFY_API_KEY` | Set automatically from `render.yaml` |
-| `APP_URL` | `https://mango-product-feed.onrender.com` |
+| `DATABASE_URL` | `postgresql://USER:PASS@HOST/DB?sslmode=require` |
+| `SHOPIFY_API_SECRET` | From Shopify Partners → Client credentials |
+| `SHOPIFY_API_KEY` | `133b57713a5ec35408555486ad242555` |
 | `SHOPIFY_APP_URL` | `https://mango-product-feed.onrender.com` |
+| `APP_URL` | `https://mango-product-feed.onrender.com` |
+| `NODE_ENV` | `production` |
+| `SCOPES` | `read_products,write_products,read_inventory,read_content` |
 
-`SHOPIFY_API_SECRET` is **not** stored in git. Add it manually in Render.
+**Important:** External Render Postgres URLs **must** end with `?sslmode=require`.
+
+Use the **Internal Database URL** if your web service and database are both on Render (recommended).
+
+Secrets are **never** committed to git (`sync: false` in `render.yaml`).
 
 ## Deploy
 
-1. Push to GitHub (`main` branch)
-2. Render auto-deploys, or click **Manual Deploy**
-3. Start command: `npm run render-start`
-4. Verify: `https://mango-product-feed.onrender.com/health`
+1. Push to GitHub `main` (triggers auto-deploy if connected)
+2. Or **Manual Deploy → Deploy latest commit** in Render
+3. Watch **Logs** for `[startup] Production environment check passed.`
+
+## Verify
+
+```bash
+curl https://mango-product-feed.onrender.com/health
+curl -I https://mango-product-feed.onrender.com/
+```
+
+- `/health` → 200
+- `/` → 200 (not 500)
+- `/app` → open from **Shopify Admin**, not a direct browser tab
 
 ## Install app
 
-Open the app from Shopify Admin (embedded). Do not expect `/app` to work when opened directly in a browser tab without Shopify session context.
+Apps → Mango Product Feed in Shopify Admin (embedded OAuth).
