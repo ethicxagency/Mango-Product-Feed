@@ -24,8 +24,14 @@ import {
   type FeedType,
 } from "../types/product";
 import { getAppUrl } from "../utils/product";
+import { ensureLocalShopExists } from "../services/shop.server";
+import { createDefaultFeedConfigsForShop } from "../services/feed-config.server";
+import { buildFeedUrl } from "../types/feed";
+import { LOCAL_SHOP_ID } from "../constants/shop";
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  await ensureLocalShopExists();
+  await createDefaultFeedConfigsForShop(LOCAL_SHOP_ID);
   const products = await listProducts();
   const health = analyzeFeedHealth(products);
   const appUrl = getAppUrl(request);
@@ -39,20 +45,35 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ),
   ) as Record<FeedType, string>;
 
-  return { health, appUrl, previews };
+  const feedUrls = Object.fromEntries(
+    await Promise.all(
+      FEED_TYPES.map(async (feedType) => {
+        const { getDefaultFeedConfig } = await import("../services/feed-config.server");
+        const config = await getDefaultFeedConfig(feedType);
+        if (config) {
+          return [
+            feedType,
+            buildFeedUrl(appUrl, feedType, config.token, FEED_PATHS[feedType]),
+          ];
+        }
+        return [feedType, `${appUrl}${FEED_PATHS[feedType]}`];
+      }),
+    ),
+  ) as Record<FeedType, string>;
+
+  return { health, appUrl, previews, feedUrls };
 }
 
 export default function FeedsRoute() {
-  const { health, appUrl, previews } = useLoaderData<typeof loader>();
+  const { health, appUrl, previews, feedUrls } = useLoaderData<typeof loader>();
   const [activeFeed, setActiveFeed] = useState<FeedType | null>(null);
   const [copiedFeed, setCopiedFeed] = useState<FeedType | null>(null);
 
   const handleCopy = useCallback(async (feedType: FeedType) => {
-    const url = `${appUrl}${FEED_PATHS[feedType]}`;
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(feedUrls[feedType]);
     setCopiedFeed(feedType);
     setTimeout(() => setCopiedFeed(null), 2000);
-  }, [appUrl]);
+  }, [feedUrls]);
 
   return (
     <AppLayout>
@@ -75,7 +96,7 @@ export default function FeedsRoute() {
                     <TextField
                       label=""
                       labelHidden
-                      value={`${appUrl}${FEED_PATHS[feedType]}`}
+                      value={feedUrls[feedType]}
                       autoComplete="off"
                       readOnly
                       connectedRight={
@@ -89,11 +110,11 @@ export default function FeedsRoute() {
                         Preview XML
                       </Button>
                       <Button
-                        url={`${FEED_PATHS[feedType]}`}
+                        url={feedUrls[feedType]}
                         target="_blank"
                         variant="plain"
                       >
-                        Open feed
+                        View feed
                       </Button>
                     </InlineStack>
                   </BlockStack>

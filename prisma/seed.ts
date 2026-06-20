@@ -248,8 +248,20 @@ async function main() {
     },
   });
 
+  const customFeed = await prisma.feedConfig.create({
+    data: {
+      shopId: LOCAL_SHOP_ID,
+      name: "Default Custom XML Feed",
+      feedType: "CUSTOM",
+      token: "custom-default-token",
+      isDefault: true,
+      filterMode: "ALL",
+      schedule: "DAILY",
+    },
+  });
+
   console.log(
-    `Seeded ${sampleProducts.length} products, ${defaultFeeds.length + 3} feed configs, Pinterest (${pinterestFeed.id}), Snapchat (${snapchatFeed.id}).`,
+    `Seeded ${sampleProducts.length} products, ${defaultFeeds.length + 4} feed configs, Pinterest (${pinterestFeed.id}), Snapchat (${snapchatFeed.id}), Custom (${customFeed.id}).`,
   );
 }
 

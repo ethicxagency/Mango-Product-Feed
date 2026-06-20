@@ -25,9 +25,11 @@ import {
 import { buildFeedUrl } from "../types/feed";
 import { getAppUrl } from "../utils/product";
 import { getEmbeddedShopContext } from "../utils/auth.server";
+import { createDefaultFeedConfigsForShop } from "../services/feed-config.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { shopId } = await getEmbeddedShopContext(request);
+  await createDefaultFeedConfigsForShop(shopId);
   const products = await listProducts(shopId);
   const health = analyzeFeedHealth(products);
   const appUrl = getAppUrl(request);
@@ -36,25 +38,40 @@ export async function loader({ request }: LoaderFunctionArgs) {
     await Promise.all(
       FEED_TYPES.map(async (feedType) => [
         feedType,
-        await previewFeed(feedType),
+        await previewFeed(feedType, shopId),
       ]),
     ),
   ) as Record<FeedType, string>;
 
-  return { health, appUrl, previews };
+  const feedUrls = Object.fromEntries(
+    await Promise.all(
+      FEED_TYPES.map(async (feedType) => {
+        const { getDefaultFeedConfig } = await import("../services/feed-config.server");
+        const config = await getDefaultFeedConfig(feedType, shopId);
+        if (config) {
+          return [
+            feedType,
+            buildFeedUrl(appUrl, feedType, config.token, FEED_PATHS[feedType]),
+          ];
+        }
+        return [feedType, `${appUrl}${FEED_PATHS[feedType]}`];
+      }),
+    ),
+  ) as Record<FeedType, string>;
+
+  return { health, appUrl, previews, feedUrls };
 }
 
 export default function EmbeddedFeedsRoute() {
-  const { health, appUrl, previews } = useLoaderData<typeof loader>();
+  const { health, appUrl, previews, feedUrls } = useLoaderData<typeof loader>();
   const [activeFeed, setActiveFeed] = useState<FeedType | null>(null);
   const [copiedFeed, setCopiedFeed] = useState<FeedType | null>(null);
 
   const handleCopy = useCallback(async (feedType: FeedType) => {
-    const url = `${appUrl}${FEED_PATHS[feedType]}`;
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(feedUrls[feedType]);
     setCopiedFeed(feedType);
     setTimeout(() => setCopiedFeed(null), 2000);
-  }, [appUrl]);
+  }, [feedUrls]);
 
   return (
     <Page title="Feed Generator" subtitle="Public XML feeds for ad platforms">
@@ -69,7 +86,7 @@ export default function EmbeddedFeedsRoute() {
                   </Text>
                   <TextField
                     label="Feed URL"
-                    value={`${appUrl}${FEED_PATHS[feedType]}`}
+                    value={feedUrls[feedType]}
                     autoComplete="off"
                     readOnly
                     connectedRight={
@@ -81,7 +98,12 @@ export default function EmbeddedFeedsRoute() {
                   <Text as="p" variant="bodySm" tone="subdued">
                     Secret URL example: {buildFeedUrl(appUrl, feedType, "your-token", FEED_PATHS[feedType])}
                   </Text>
-                  <Button onClick={() => setActiveFeed(feedType)}>Preview XML</Button>
+                  <InlineStack gap="200">
+                    <Button onClick={() => setActiveFeed(feedType)}>Preview XML</Button>
+                    <Button url={feedUrls[feedType]} target="_blank" variant="plain">
+                      View feed
+                    </Button>
+                  </InlineStack>
                 </BlockStack>
               </Card>
             ))}
@@ -108,5 +130,19 @@ export default function EmbeddedFeedsRoute() {
         </Modal>
       )}
     </Page>
+  );
+}
+
+function InlineStack({
+  gap,
+  children,
+}: {
+  gap: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+      {children}
+    </div>
   );
 }

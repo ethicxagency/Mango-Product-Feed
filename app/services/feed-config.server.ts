@@ -222,6 +222,7 @@ export async function createDefaultFeedConfigsForShop(shopId: string) {
     "TIKTOK",
     "PINTEREST",
     "SNAPCHAT",
+    "CUSTOM",
   ];
 
   for (const feedType of feedTypes) {

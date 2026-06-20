@@ -126,33 +126,39 @@ ${items}
 </rss>`;
 }
 
-export async function generateFeed(feedType: FeedType): Promise<string> {
+export async function generateFeed(
+  feedType: FeedType,
+  shopId?: string | null,
+): Promise<string> {
   const { getDefaultFeedConfig } = await import("./feed-config.server");
   const { buildFeedXmlFromConfig } = await import("./feed-stream.server");
 
-  const config = await getDefaultFeedConfig(feedType);
+  const config = await getDefaultFeedConfig(feedType, shopId);
   if (config) {
     const xml = await buildFeedXmlFromConfig(config);
     await logFeedRequest(feedType, await countProductsInXml(xml), "SUCCESS");
     return xml;
   }
 
-  const products = await listProducts();
+  const products = await listProducts(shopId);
   const xml = buildFeedXml(products, feedType);
   await logFeedRequest(feedType, products.length, "SUCCESS");
   return xml;
 }
 
-export async function previewFeed(feedType: FeedType): Promise<string> {
+export async function previewFeed(
+  feedType: FeedType,
+  shopId?: string | null,
+): Promise<string> {
   const { getDefaultFeedConfig } = await import("./feed-config.server");
   const { buildFeedXmlFromConfig } = await import("./feed-stream.server");
 
-  const config = await getDefaultFeedConfig(feedType);
+  const config = await getDefaultFeedConfig(feedType, shopId);
   if (config) {
     return buildFeedXmlFromConfig(config);
   }
 
-  const products = await listProducts();
+  const products = await listProducts(shopId);
   return buildFeedXml(products, feedType);
 }
 
