@@ -6,7 +6,6 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 import { Layout, Page } from "@shopify/polaris";
-import { AppLayout } from "../components/AppLayout";
 import { FeedConfigForm } from "../components/FeedConfigForm";
 import { getProductFilterOptions } from "../services/feed-builder.server";
 import {
@@ -15,13 +14,12 @@ import {
 } from "../services/feed-config.server";
 import type { FeedConfigInput, FeedRuleInput } from "../types/feed";
 import type { FeedType } from "../types/product";
-import { resolveFeedBuilderShopId } from "../utils/auth.server";
+import { getEmbeddedShopContext } from "../utils/auth.server";
 import { parseFeedConfigFormData, parseFeedRulesJson } from "../utils/feed";
-import { ensureLocalShopExists } from "../services/shop.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  await ensureLocalShopExists();
-  const filterOptions = await getProductFilterOptions();
+  const { shopId } = await getEmbeddedShopContext(request);
+  const filterOptions = await getProductFilterOptions(shopId);
   return { filterOptions };
 }
 
@@ -39,6 +37,7 @@ function parseRules(raw: string): FeedRuleInput[] {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const { shopId } = await getEmbeddedShopContext(request);
   const formData = await request.formData();
   const input = parseFeedConfigFormData(formData);
   const errors: Record<string, string> = {};
@@ -65,33 +64,30 @@ export async function action({ request }: ActionFunctionArgs) {
     isActive: input.isActive,
   };
 
-  const shopId = await resolveFeedBuilderShopId(request);
   const feed = await createFeedConfig(configInput, shopId);
   await replaceFeedRules(feed.id, parseRules(input.rules));
 
-  return redirect(`/feeds/builder/${feed.id}`);
+  return redirect(`/app/feeds/builder`);
 }
 
-export default function FeedBuilderNewRoute() {
+export default function EmbeddedFeedBuilderNewRoute() {
   const { filterOptions } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
 
   return (
-    <AppLayout>
-      <Page
-        title="Create feed"
-        backAction={{ content: "Feed Builder", url: "/feeds/builder" }}
-      >
-        <Layout>
-          <Layout.Section>
-            <FeedConfigForm
-              filterOptions={filterOptions}
-              errors={actionData?.errors}
-              submitLabel="Create feed"
-            />
-          </Layout.Section>
-        </Layout>
-      </Page>
-    </AppLayout>
+    <Page
+      title="Create feed"
+      backAction={{ content: "Feed Builder", url: "/app/feeds/builder" }}
+    >
+      <Layout>
+        <Layout.Section>
+          <FeedConfigForm
+            filterOptions={filterOptions}
+            errors={actionData?.errors}
+            submitLabel="Create feed"
+          />
+        </Layout.Section>
+      </Layout>
+    </Page>
   );
 }

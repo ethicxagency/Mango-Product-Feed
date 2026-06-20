@@ -26,7 +26,7 @@ export default function EmbeddedFeedBuilderRoute() {
     <Page
       title="Feed Builder"
       subtitle="Multiple Google, Meta, and TikTok feeds per shop"
-      primaryAction={{ content: "Create feed", url: "/feeds/builder/new" }}
+      primaryAction={{ content: "Create feed", url: "/app/feeds/builder/new" }}
     >
       <Layout>
         <Layout.Section>

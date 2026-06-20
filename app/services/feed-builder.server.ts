@@ -89,24 +89,32 @@ export async function listFilteredProductsForPreview(
     .map((result) => result.product);
 }
 
-export async function getProductFilterOptions() {
+export async function getProductFilterOptions(shopId?: string | null) {
+  const { resolveShopId } = await import("./shop.server");
+  const resolvedShopId = await resolveShopId(shopId);
+  const shopFilter = { shopId: resolvedShopId };
+
   const [categories, brands, productTypes, products] = await Promise.all([
     prisma.product.findMany({
+      where: shopFilter,
       distinct: ["category"],
       select: { category: true },
       orderBy: { category: "asc" },
     }),
     prisma.product.findMany({
+      where: shopFilter,
       distinct: ["brand"],
       select: { brand: true },
       orderBy: { brand: "asc" },
     }),
     prisma.product.findMany({
+      where: shopFilter,
       distinct: ["productType"],
       select: { productType: true },
       orderBy: { productType: "asc" },
     }),
     prisma.product.findMany({
+      where: shopFilter,
       select: { id: true, title: true, sku: true },
       orderBy: { title: "asc" },
     }),
