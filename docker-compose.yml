@@ -1,0 +1,29 @@
+services:
+  # Local dev currently runs on SQLite (see .env). This Postgres service is
+  # ready for the production cutover: point DATABASE_URL at it, change the
+  # `datasource` provider in prisma/schema.prisma to "postgresql", and
+  # re-run `npm run db:migrate`.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mango
+      POSTGRES_PASSWORD: mango
+      POSTGRES_DB: mango_product_feed
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://mango:mango@postgres:5432/mango_product_feed
+      APP_URL: http://localhost:3000
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

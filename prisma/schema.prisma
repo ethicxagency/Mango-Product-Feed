@@ -1,0 +1,455 @@
+// Mango Product Feed — Prisma schema
+//
+// NOTE ON DATABASE PROVIDER: local development currently targets SQLite so the
+// app can run with zero external services. The schema deliberately avoids
+// SQLite-only features (native enums, Decimal, Json columns) so that
+// switching `provider` to "postgresql" and re-running `prisma migrate` is a
+// drop-in change later. Enum-like fields use plain String columns backed by
+// TypeScript union types in app/types.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Shop (mock Shopify store — stands in for the real shop record obtained via
+// OAuth once Shopify is connected)
+// ---------------------------------------------------------------------------
+
+model Shop {
+  id            String   @id @default(cuid())
+  shopifyDomain String   @unique
+  name          String
+  email         String
+  currency      String   @default("USD")
+  ianaTimezone  String   @default("America/New_York")
+  planName      String   @default("mock-development")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Set false when the app/uninstalled webhook fires; the shop's data is
+  // kept (in case of reinstall) rather than deleted outright.
+  isActive      Boolean   @default(true)
+  installedAt   DateTime?
+  // Scopes granted at the most recent OAuth grant, for support/debugging.
+  grantedScopes String    @default("")
+
+  // Sync status, surfaced on the verification report / dashboard.
+  lastProductSyncAt    DateTime?
+  lastCollectionSyncAt DateTime?
+  lastSyncStatus       String?
+  lastSyncError        String?
+
+  products    Product[]
+  collections Collection[]
+  feeds       Feed[]
+  tags        Tag[]
+
+  @@map("shops")
+}
+
+// ---------------------------------------------------------------------------
+// Shopify OAuth session storage — required shape for
+// @shopify/shopify-app-session-storage-prisma (field names/types are fixed
+// by that package, not ours to change).
+// ---------------------------------------------------------------------------
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  @@map("session")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog: Products, Variants, Images, Tags, Metafields, Collections
+// ---------------------------------------------------------------------------
+
+model Product {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Shopify's numeric product ID (as a string). Null for the Phase 1 mock
+  // catalog; set once a product is synced from a real Shopify store.
+  shopifyId String?
+
+  title           String
+  handle          String
+  descriptionHtml String @default("")
+  vendor          String @default("")
+  productType     String @default("")
+  seoTitle        String @default("")
+  seoDescription  String @default("")
+
+  // ACTIVE | DRAFT | ARCHIVED
+  status String @default("ACTIVE")
+
+  // null => not published to any sales channel
+  publishedAt         DateTime?
+  // Simulates a product hidden from the Online Store / sales channels
+  isHidden            Boolean   @default(false)
+  // Simulates a product locked behind storefront/page password protection
+  isPasswordProtected Boolean   @default(false)
+  // Soft delete — excluded from every feed once set
+  deletedAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  variants     Variant[]
+  images       ProductImage[]
+  metafields   ProductMetafield[]
+  tags         ProductTag[]
+  collections  ProductCollection[]
+  feedProducts FeedProduct[]
+
+  @@unique([shopId, handle])
+  @@unique([shopId, shopifyId])
+  @@index([shopId, status])
+  @@index([shopId, vendor])
+  @@index([shopId, productType])
+  @@index([shopId, createdAt])
+  @@index([shopId, updatedAt])
+  @@map("products")
+}
+
+model Variant {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Shopify's numeric variant/inventory item IDs. Null for mock data; set
+  // once synced from a real store. The inventory item ID is what the
+  // Inventory API keys off of, independent of the variant ID itself.
+  shopifyId              String? @unique
+  shopifyInventoryItemId String? @unique
+
+  title    String @default("Default Title")
+  sku      String @default("")
+  barcode  String @default("")
+  position Int    @default(1)
+
+  // Nullable to simulate real-world sync gaps — the "variants without a
+  // price" exclusion rule needs data where this is actually missing.
+  price          Float?
+  compareAtPrice Float?
+
+  option1 String?
+  option2 String?
+  option3 String?
+
+  weight     Float  @default(0)
+  weightUnit String @default("kg") // g | kg | oz | lb
+
+  inventoryQuantity   Int    @default(0)
+  // DENY | CONTINUE  (CONTINUE = "continue selling when out of stock")
+  inventoryPolicy     String @default("DENY")
+  // SHOPIFY | NOT_MANAGED
+  inventoryManagement String @default("SHOPIFY")
+
+  taxable          Boolean @default(true)
+  requiresShipping Boolean @default(true)
+
+  imageId String?
+  image   ProductImage? @relation(fields: [imageId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([sku])
+  @@index([barcode])
+  @@map("variants")
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  shopifyId String? @unique
+
+  url      String
+  altText  String  @default("")
+  position Int     @default(1)
+  width    Int?
+  height   Int?
+  // Simulates a URL that 404s / fails to load, for the skip-broken-image rule
+  isBroken Boolean @default(false)
+
+  variants Variant[]
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model ProductMetafield {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  namespace String
+  key       String
+  value     String
+  type      String @default("single_line_text_field")
+
+  @@unique([productId, namespace, key])
+  @@map("product_metafields")
+}
+
+model Tag {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name   String
+
+  products ProductTag[]
+  feeds    FeedTag[]
+
+  @@unique([shopId, name])
+  @@map("tags")
+}
+
+model ProductTag {
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@map("product_tags")
+}
+
+model Collection {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  shopifyId String?
+
+  title       String
+  handle      String
+  description String  @default("")
+  isSmart     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  products ProductCollection[]
+  feeds    FeedCollection[]
+
+  @@unique([shopId, handle])
+  @@unique([shopId, shopifyId])
+  @@map("collections")
+}
+
+model ProductCollection {
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([productId, collectionId])
+  @@map("product_collections")
+}
+
+// ---------------------------------------------------------------------------
+// Feeds, Feed Rules, Feed targeting join tables
+// ---------------------------------------------------------------------------
+
+model Feed {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  name    String
+  // GOOGLE | META | TIKTOK | PINTEREST | SNAPCHAT | MICROSOFT | CUSTOM
+  channel String
+
+  // ENABLED | DISABLED
+  status String @default("ENABLED")
+
+  // Feed URL identity
+  publicToken String @unique @default(cuid())
+  secretToken String @unique @default(cuid())
+
+  // XML output options
+  rootNode    String  @default("feed")
+  itemNode    String  @default("item")
+  prettyPrint Boolean @default(true)
+  useCdata    Boolean @default(true)
+  currency    String  @default("USD")
+
+  // Cached state from the most recent generation, kept in sync with
+  // FeedHistory so the dashboard/list views don't need an extra join.
+  lastGeneratedAt      DateTime?
+  lastGenerationStatus String?
+  lastGenerationMs     Int?
+  lastProductCount     Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rule           FeedRule?
+  collections    FeedCollection[]
+  tags           FeedTag[]
+  vendors        FeedVendor[]
+  productTypes   FeedProductType[]
+  manualProducts FeedProduct[]
+  history        FeedHistory[]
+  downloads      FeedDownload[]
+
+  @@index([shopId, status])
+  @@map("feeds")
+}
+
+model FeedRule {
+  id     String @id @default(cuid())
+  feedId String @unique
+  feed   Feed   @relation(fields: [feedId], references: [id], onDelete: Cascade)
+
+  // ALL | COLLECTIONS | TAGS | VENDOR | PRODUCT_TYPE | MANUAL
+  productSelectionType String @default("ALL")
+
+  includeOutOfStock     Boolean @default(false)
+  includeVariants       Boolean @default(true)
+  includeWithoutGtin    Boolean @default(true)
+  includeWithoutSku     Boolean @default(true)
+  skipDuplicateProducts Boolean @default(true)
+  skipDuplicateVariants Boolean @default(true)
+  skipBrokenImages      Boolean @default(true)
+  onlyPublished         Boolean @default(true)
+  onlyActive            Boolean @default(true)
+
+  priceMin Float?
+  priceMax Float?
+
+  createdAfter  DateTime?
+  createdBefore DateTime?
+  updatedAfter  DateTime?
+  updatedBefore DateTime?
+
+  @@map("feed_rules")
+}
+
+model FeedCollection {
+  feedId       String
+  feed         Feed       @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([feedId, collectionId])
+  @@map("feed_collections")
+}
+
+model FeedTag {
+  feedId String
+  feed   Feed   @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([feedId, tagId])
+  @@map("feed_tags")
+}
+
+model FeedVendor {
+  feedId String
+  feed   Feed   @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  vendor String
+
+  @@id([feedId, vendor])
+  @@map("feed_vendors")
+}
+
+model FeedProductType {
+  feedId      String
+  feed        Feed   @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  productType String
+
+  @@id([feedId, productType])
+  @@map("feed_product_types")
+}
+
+model FeedProduct {
+  feedId    String
+  feed      Feed    @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([feedId, productId])
+  @@map("feed_products")
+}
+
+// ---------------------------------------------------------------------------
+// Feed History / Logs / Downloads
+// ---------------------------------------------------------------------------
+
+model FeedHistory {
+  id     String @id @default(cuid())
+  feedId String
+  feed   Feed   @relation(fields: [feedId], references: [id], onDelete: Cascade)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+
+  productCount Int @default(0)
+  variantCount Int @default(0)
+  errorCount   Int @default(0)
+
+  // RUNNING | SUCCESS | FAILED | PARTIAL
+  status String @default("RUNNING")
+
+  // JSON-encoded array of { code, message, productId? } — stored as text
+  // rather than a native Json column to stay portable across DB providers.
+  errorsJson String @default("[]")
+
+  fileSizeBytes Int?
+
+  // MANUAL | SCHEDULED | API
+  triggeredBy String @default("MANUAL")
+
+  downloads FeedDownload[]
+
+  @@index([feedId, startedAt])
+  @@map("feed_history")
+}
+
+model FeedDownload {
+  id            String       @id @default(cuid())
+  feedId        String
+  feed          Feed         @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  feedHistoryId String?
+  feedHistory   FeedHistory? @relation(fields: [feedHistoryId], references: [id])
+
+  downloadedAt DateTime @default(now())
+  ipAddress    String?
+  userAgent    String?
+
+  // PUBLIC_URL | PRIVATE_URL | MANUAL_DOWNLOAD
+  source String @default("MANUAL_DOWNLOAD")
+
+  @@index([feedId, downloadedAt])
+  @@map("feed_downloads")
+}

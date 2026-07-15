@@ -1,0 +1,32 @@
+node_modules
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Shopify CLI local state
+.shopify
+
+# Build output
+/build
+/public/build
+dist
+.cache
+
+# SQLite local dev database
+/prisma/dev.db
+/prisma/dev.db-journal
+prisma/dev.sqlite*
+
+# Test artifacts
+/playwright-report
+/test-results
+/coverage
+coverage
+
+# Misc
+.DS_Store
+*.log
+.vercel
+.turbo
