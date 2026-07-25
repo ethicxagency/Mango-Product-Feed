@@ -1,1 +1,52 @@
 @import "tailwindcss";
+
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.toggle-switch input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--p-color-bg-fill-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 150ms ease;
+}
+
+.toggle-switch input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 150ms ease;
+}
+
+.toggle-switch input[type="checkbox"]:checked {
+  background: #1a1a1a;
+}
+
+.toggle-switch input[type="checkbox"]:checked::before {
+  transform: translateX(18px);
+}
+
+.toggle-switch input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-switch input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--p-color-border-focus, #005bd3);
+  outline-offset: 2px;
+}

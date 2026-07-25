@@ -1,3 +1,4 @@
+import type { SettingsWithRelations } from "~/repositories/settings.repository.server";
 import type { FeedItem } from "~/services/feed-rules/types";
 import type { FeedChannel } from "~/types/feed";
 import type { XmlWriter } from "./xml-writer";
@@ -8,6 +9,11 @@ export interface FeedTemplateContext {
   feedLink: string;
   rootNode: string;
   itemNode: string;
+  /** Shop-wide merchant configuration (Settings > Google Merchant / Meta
+   * Commerce / TikTok) — platform-specific defaults like brand, condition,
+   * product category, custom labels, and shipping price live here rather
+   * than per-product, since they're genuinely shop-level settings. */
+  settings: SettingsWithRelations;
 }
 
 /**

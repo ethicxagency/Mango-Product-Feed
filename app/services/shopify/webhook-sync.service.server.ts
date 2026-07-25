@@ -14,6 +14,13 @@ function toGid(
   return `gid://shopify/${resource}/${id}`;
 }
 
+async function touchWebhookSync(shopId: string): Promise<void> {
+  await db.shop.update({
+    where: { id: shopId },
+    data: { lastWebhookSyncAt: new Date() },
+  });
+}
+
 /**
  * Translates incoming webhook events into calls on ProductSyncService /
  * CollectionSyncService — this is the one place that knows how a webhook
@@ -31,6 +38,7 @@ export const webhookSyncService = {
       shopId,
       toGid("Product", payload.id as number | string),
     );
+    await touchWebhookSync(shopId);
   },
 
   async handleProductDelete(
@@ -41,6 +49,7 @@ export const webhookSyncService = {
       shopId,
       toGid("Product", payload.id as number | string),
     );
+    await touchWebhookSync(shopId);
   },
 
   async handleCollectionUpsert(
@@ -53,6 +62,7 @@ export const webhookSyncService = {
       shopId,
       toGid("Collection", payload.id as number | string),
     );
+    await touchWebhookSync(shopId);
   },
 
   async handleCollectionDelete(
@@ -63,6 +73,7 @@ export const webhookSyncService = {
       shopId,
       toGid("Collection", payload.id as number | string),
     );
+    await touchWebhookSync(shopId);
   },
 
   /** The shop's data is kept (not deleted) in case of a reinstall — only

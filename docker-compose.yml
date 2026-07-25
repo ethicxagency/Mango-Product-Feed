@@ -1,8 +1,8 @@
 services:
-  # Local dev currently runs on SQLite (see .env). This Postgres service is
-  # ready for the production cutover: point DATABASE_URL at it, change the
-  # `datasource` provider in prisma/schema.prisma to "postgresql", and
-  # re-run `npm run db:migrate`.
+  # Local Postgres instance matching the production database engine (see
+  # prisma/schema.prisma). Run `docker compose up -d postgres`, then
+  # `npm run db:migrate` against it — DATABASE_URL in .env already points
+  # here by default.
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped

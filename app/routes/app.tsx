@@ -1,7 +1,11 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { Frame, Navigation } from "@shopify/polaris";
-import { HomeIcon, ListBulletedIcon } from "@shopify/polaris-icons";
-import { Outlet, useLocation } from "@remix-run/react";
+import { Frame, Navigation, Text } from "@shopify/polaris";
+import {
+  CreditCardIcon,
+  HomeIcon,
+  ListBulletedIcon,
+} from "@shopify/polaris-icons";
+import { Link, Outlet, useLocation } from "@remix-run/react";
 
 import { isMockModeEnabled } from "~/lib/mock-mode.server";
 import { authenticate } from "~/shopify.server";
@@ -23,25 +27,90 @@ export default function AppLayout() {
 
   return (
     <Frame
+      logo={{
+        topBarSource: "/logo.png",
+        url: "/app",
+        accessibilityLabel: "Mango Product Feed",
+        width: 36,
+      }}
       navigation={
-        <Navigation location={location.pathname}>
-          <Navigation.Section
-            items={[
-              {
-                url: "/app",
-                label: "Dashboard",
-                icon: HomeIcon,
-                selected: location.pathname === "/app",
-              },
-              {
-                url: "/app/feeds",
-                label: "Feeds",
-                icon: ListBulletedIcon,
-                selected: location.pathname.startsWith("/app/feeds"),
-              },
-            ]}
-          />
-        </Navigation>
+        <div
+          style={{ display: "flex", flexDirection: "column", height: "100%" }}
+        >
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <Link
+              to="/app"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--p-space-200)",
+                padding:
+                  "var(--p-space-400) var(--p-space-300) var(--p-space-200)",
+                textDecoration: "none",
+              }}
+            >
+              <img src="/logo.png" alt="" width={28} height={28} />
+              <Text as="span" variant="headingSm">
+                Mango Product Feed
+              </Text>
+            </Link>
+            <Navigation location={location.pathname}>
+              <Navigation.Section
+                items={[
+                  {
+                    url: "/app",
+                    label: "Dashboard",
+                    icon: HomeIcon,
+                    selected: location.pathname === "/app",
+                  },
+                  {
+                    url: "/app/feeds",
+                    label: "Feeds",
+                    icon: ListBulletedIcon,
+                    selected: location.pathname.startsWith("/app/feeds"),
+                  },
+                  {
+                    url: "/app/plans",
+                    label: "Plans",
+                    icon: CreditCardIcon,
+                    selected: location.pathname.startsWith("/app/plans"),
+                  },
+                ]}
+              />
+            </Navigation>
+          </div>
+          <div
+            style={{
+              padding: "var(--p-space-400)",
+              borderTop: "1px solid var(--p-color-border-secondary)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "var(--p-space-150)",
+              }}
+            >
+              <img src="/logo.png" alt="" width={18} height={18} />
+              <Text as="p" variant="bodySm" fontWeight="medium">
+                Mango Product Feed
+              </Text>
+            </div>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Built by merchants, for merchants.
+            </Text>
+          </div>
+        </div>
       }
     >
       <Outlet />

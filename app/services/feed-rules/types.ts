@@ -1,3 +1,4 @@
+import type { FeedItemAttributes } from "./attributes";
 import type { Availability, WeightUnit } from "~/types/product";
 
 /** One fully-resolved, XML-ready feed entry — one per exported variant
@@ -24,6 +25,11 @@ export interface FeedItem {
   option3: string | null;
   weight: number;
   weightUnit: WeightUnit;
+  taxable: boolean;
+  /** Channel-agnostic enrichment (apparel fields, GTIN/MPN validity, the
+   * long tail of optional Google attributes) — see feed-rules/attributes.ts.
+   * Which of these a channel actually writes is that Generator's decision. */
+  attributes: FeedItemAttributes;
 }
 
 export type SkipReason =

@@ -38,7 +38,7 @@ export const productRepository = {
       where: {
         shopId,
         deletedAt: null,
-        ...(query ? { title: { contains: query } } : {}),
+        ...(query ? { title: { contains: query, mode: "insensitive" } } : {}),
       },
       orderBy: { title: "asc" },
       take: limit,
@@ -51,6 +51,14 @@ export const productRepository = {
     return db.product.findMany({
       where: { shopId, id: { in: productIds } },
       select: { id: true, title: true, vendor: true, status: true },
+    });
+  },
+
+  /** Total variant count across the shop's (non-deleted) products — used
+   * for Plans page usage tracking. */
+  async countVariants(shopId: string): Promise<number> {
+    return db.variant.count({
+      where: { product: { shopId, deletedAt: null } },
     });
   },
 };

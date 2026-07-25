@@ -4,6 +4,7 @@ import {
 } from "~/repositories/feed-product.repository.server";
 import type { InventoryPolicy, ProductStatus } from "~/types/product";
 import { resolveAvailability } from "./availability";
+import { resolveFeedItemAttributes } from "./attributes";
 import {
   evaluateProductEligibility,
   evaluateVariantEligibility,
@@ -145,6 +146,13 @@ export async function* generateFeedItems({
           option3: variant.option3,
           weight: variant.weight,
           weightUnit: variant.weightUnit as FeedItem["weightUnit"],
+          taxable: variant.taxable,
+          attributes: resolveFeedItemAttributes({
+            barcode: variant.barcode,
+            sku: variant.sku,
+            productType: product.productType,
+            metafields: product.metafields,
+          }),
         };
 
         if (!rule.includeVariants) break;

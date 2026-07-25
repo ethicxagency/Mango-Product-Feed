@@ -1,3 +1,5 @@
+import { db } from "~/lib/db.server";
+import { feedHistoryRepository } from "~/repositories/feed-history.repository.server";
 import type { FeedWithRule } from "~/repositories/feed.repository.server";
 import type { FeedHistoryStatus } from "~/types/feed";
 import { streamFeedXml } from "./feed-generation.service.server";
@@ -48,7 +50,7 @@ export async function runFeedGeneration(
 ): Promise<FeedGenerationRunResult> {
   const startedAt = new Date();
   const checkTimeout = withTimeout(GENERATION_TIMEOUT_MS);
-  const { chunks, stats } = streamFeedXml(feed, appUrl);
+  const { chunks, stats } = await streamFeedXml(feed, appUrl);
 
   let xml = "";
   try {
@@ -108,6 +110,40 @@ export async function runFeedGeneration(
     xml,
     fileSizeBytes: Buffer.byteLength(xml, "utf8"),
   };
+}
+
+/** Runs a generation and persists its result — the FeedHistory row plus the
+ * denormalized Feed.lastGenerated* cache fields — in one place, so the feed
+ * editor's "Generate feed" action and the feed list's "Regenerate" row
+ * action share identical persistence instead of each reimplementing it. */
+export async function recordFeedGeneration(
+  feed: FeedWithRule,
+  appUrl: string,
+): Promise<FeedGenerationRunResult> {
+  const run = await runFeedGeneration(feed, appUrl);
+
+  await feedHistoryRepository.create(feed.id, {
+    status: run.status,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    durationMs: run.durationMs,
+    productCount: run.productCount,
+    variantCount: run.variantCount,
+    errors: run.errors,
+    fileSizeBytes: run.fileSizeBytes,
+  });
+
+  await db.feed.update({
+    where: { id: feed.id },
+    data: {
+      lastGeneratedAt: run.finishedAt,
+      lastGenerationStatus: run.status,
+      lastGenerationMs: run.durationMs,
+      lastProductCount: run.productCount,
+    },
+  });
+
+  return run;
 }
 
 export type { FeedGenerationStats };

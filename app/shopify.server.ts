@@ -22,7 +22,7 @@ const apiSecretKey =
   process.env.SHOPIFY_API_SECRET ||
   (isMockModeEnabled() ? "mock-api-secret" : "");
 
-const WEBHOOK_TOPICS = {
+export const WEBHOOK_TOPICS = {
   PRODUCTS_CREATE: "/webhooks/products/create",
   PRODUCTS_UPDATE: "/webhooks/products/update",
   PRODUCTS_DELETE: "/webhooks/products/delete",

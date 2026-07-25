@@ -1,18 +1,19 @@
 // Mango Product Feed — Prisma schema
 //
-// NOTE ON DATABASE PROVIDER: local development currently targets SQLite so the
-// app can run with zero external services. The schema deliberately avoids
-// SQLite-only features (native enums, Decimal, Json columns) so that
-// switching `provider` to "postgresql" and re-running `prisma migrate` is a
-// drop-in change later. Enum-like fields use plain String columns backed by
-// TypeScript union types in app/types.
+// NOTE ON DATABASE PROVIDER: production runs on PostgreSQL (see
+// render.yaml / docker-compose.yml). The schema deliberately avoids
+// provider-specific features (native enums, Decimal, Json columns, no
+// `@db.` type overrides) so it stays portable — local dev can still point
+// DATABASE_URL at a local Postgres instance (docker-compose.yml) or, in a
+// pinch, back at SQLite for a quick throwaway environment. Enum-like fields
+// use plain String columns backed by TypeScript union types in app/types.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -42,13 +43,22 @@ model Shop {
   // Sync status, surfaced on the verification report / dashboard.
   lastProductSyncAt    DateTime?
   lastCollectionSyncAt DateTime?
+  lastInventorySyncAt  DateTime?
+  lastWebhookSyncAt    DateTime?
   lastSyncStatus       String?
   lastSyncError        String?
+
+  // Read-only display fields for Settings > Store Information. Populated
+  // from Shopify's Shop GraphQL object during sync; blank/default in mock
+  // mode since there's no real store to describe.
+  primaryDomain String @default("")
+  shopOwnerName String @default("")
 
   products    Product[]
   collections Collection[]
   feeds       Feed[]
   tags        Tag[]
+  settings    Settings?
 
   @@map("shops")
 }
@@ -452,4 +462,138 @@ model FeedDownload {
 
   @@index([feedId, downloadedAt])
   @@map("feed_downloads")
+}
+
+// ---------------------------------------------------------------------------
+// Settings — one row per shop (root record), with platform-specific default
+// groups split into their own 1:1 tables rather than one giant flat table.
+// Store Information, Team, and About are intentionally not modeled here:
+// they're either read-only (sourced from Shop) or fully static content.
+// ---------------------------------------------------------------------------
+
+model Settings {
+  id     String @id @default(cuid())
+  shopId String @unique
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // ---- General ----
+  storeName       String @default("")
+  companyName     String @default("")
+  supportEmail    String @default("")
+  timezone        String @default("America/New_York")
+  defaultLanguage String @default("en")
+  defaultCurrency String @default("USD")
+  country         String @default("US")
+  // MM/DD/YYYY | DD/MM/YYYY | YYYY-MM-DD
+  dateFormat      String @default("MM/DD/YYYY")
+
+  // ---- Feed Defaults ----
+  // GOOGLE | META | TIKTOK
+  defaultPlatform          String  @default("GOOGLE")
+  feedDefaultLanguage      String  @default("en")
+  feedDefaultCurrency      String  @default("USD")
+  feedDefaultCountry       String  @default("US")
+  feedIncludeVariants      Boolean @default(true)
+  feedIncludeOutOfStock    Boolean @default(false)
+  feedIncludeDraftProducts Boolean @default(false)
+  feedDefaultProductLimit  Int?
+  feedEnablePrettyXml      Boolean @default(true)
+  // Reserved for a future release — compressed (.xml.gz) feed output.
+  feedEnableXmlCompression Boolean @default(false)
+
+  // ---- Notifications ----
+  notifyFeedGenerationFailed  Boolean @default(true)
+  notifySynchronizationFailed Boolean @default(true)
+  notifyWeeklyFeedReport      Boolean @default(false)
+  notifyWebhookErrors         Boolean @default(true)
+  notificationEmail           String  @default("")
+
+  // ---- Security ----
+  // When true, the feed-serving route rejects even the "public" (no ?token)
+  // URL for every feed, requiring the private token URL always.
+  requireSecretTokenGlobally Boolean   @default(false)
+  // When set and in the past, every feed's public (no-token) URL is
+  // rejected regardless of the feed's own enabled/disabled status.
+  publicUrlsExpireAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  googleMerchant GoogleMerchantSettings?
+  metaCommerce   MetaCommerceSettings?
+  tiktok         TikTokSettings?
+  productRules   ProductRulesSettings?
+
+  @@map("settings")
+}
+
+model GoogleMerchantSettings {
+  id         String   @id @default(cuid())
+  settingsId String   @unique
+  settings   Settings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  defaultBrand           String  @default("")
+  // new | used | refurbished
+  defaultCondition       String  @default("new")
+  identifierExists       Boolean @default(true)
+  shippingCountry        String  @default("US")
+  shippingPrice          Float?
+  taxEnabled             Boolean @default(false)
+  defaultProductCategory String  @default("")
+  defaultCustomLabel0    String  @default("")
+  defaultCustomLabel1    String  @default("")
+  defaultCustomLabel2    String  @default("")
+  defaultCustomLabel3    String  @default("")
+  defaultCustomLabel4    String  @default("")
+
+  @@map("google_merchant_settings")
+}
+
+model MetaCommerceSettings {
+  id         String   @id @default(cuid())
+  settingsId String   @unique
+  settings   Settings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  defaultBrand        String @default("")
+  // new | used | refurbished
+  condition           String @default("new")
+  // DENY | CONTINUE
+  inventoryPolicy     String @default("DENY")
+  facebookCatalogType String @default("commerce")
+
+  @@map("meta_commerce_settings")
+}
+
+model TikTokSettings {
+  id         String   @id @default(cuid())
+  settingsId String   @unique
+  settings   Settings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  defaultBrand           String @default("")
+  // new | used | refurbished
+  condition              String @default("new")
+  // DENY | CONTINUE
+  inventoryPolicy        String @default("DENY")
+  defaultProductCategory String @default("")
+
+  @@map("tiktok_settings")
+}
+
+model ProductRulesSettings {
+  id         String   @id @default(cuid())
+  settingsId String   @unique
+  settings   Settings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  excludeDraftProducts    Boolean @default(true)
+  excludeArchivedProducts Boolean @default(true)
+  excludeOutOfStock       Boolean @default(false)
+  excludeNoImage          Boolean @default(true)
+  excludeNoSku            Boolean @default(false)
+  excludeNoGtin           Boolean @default(false)
+  excludeHiddenProducts   Boolean @default(true)
+  excludeAdultProducts    Boolean @default(false)
+  minPrice                Float?
+  maxPrice                Float?
+
+  @@map("product_rules_settings")
 }

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { useActionData, useLoaderData, useNavigation } from "@remix-run/react";
@@ -19,15 +18,15 @@ import { getCurrentShop } from "~/lib/current-shop.server";
 import { getAppUrl } from "~/lib/env.server";
 import { buildFeedUrls } from "~/lib/feed-urls";
 import { parseFeedForm } from "~/lib/parse-feed-form.server";
+import { useCopyToClipboard } from "~/lib/use-copy-to-clipboard";
 import { catalogFacetsRepository } from "~/repositories/catalog-facets.repository.server";
 import { collectionRepository } from "~/repositories/collection.repository.server";
 import { feedHistoryRepository } from "~/repositories/feed-history.repository.server";
 import { productRepository } from "~/repositories/product.repository.server";
 import { tagRepository } from "~/repositories/tag.repository.server";
 import { streamFeedXml } from "~/services/feed-generation.service.server";
-import { runFeedGeneration } from "~/services/feed-generation-runner.service.server";
+import { recordFeedGeneration } from "~/services/feed-generation-runner.service.server";
 import { feedService } from "~/services/feed.service.server";
-import { db } from "~/lib/db.server";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const shop = await getCurrentShop(request);
@@ -59,7 +58,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       lastProductCount: feed.lastProductCount,
     },
     formValues: feedService.toFormInput(feed),
-    urls: buildFeedUrls(getAppUrl(), feed),
+    urls: buildFeedUrls(getAppUrl(), feed, shop.shopifyDomain),
     collections: collections.map((c) => ({ id: c.id, label: c.title })),
     tags: tags.map((t) => ({ id: t.id, label: t.name })),
     vendors,
@@ -113,28 +112,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       throw new Response("Feed not found", { status: 404 });
     }
 
-    const run = await runFeedGeneration(feed, getAppUrl());
-
-    await feedHistoryRepository.create(feedId, {
-      status: run.status,
-      startedAt: run.startedAt,
-      finishedAt: run.finishedAt,
-      durationMs: run.durationMs,
-      productCount: run.productCount,
-      variantCount: run.variantCount,
-      errors: run.errors,
-      fileSizeBytes: run.fileSizeBytes,
-    });
-
-    await db.feed.update({
-      where: { id: feedId },
-      data: {
-        lastGeneratedAt: run.finishedAt,
-        lastGenerationStatus: run.status,
-        lastGenerationMs: run.durationMs,
-        lastProductCount: run.productCount,
-      },
-    });
+    const run = await recordFeedGeneration(feed, getAppUrl());
 
     return json({
       ok: true,
@@ -162,7 +140,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const itemOpenTag = `<${feed.channel === "CUSTOM" ? feed.itemNode : "item"}>`;
     const PREVIEW_ITEM_LIMIT = 10;
 
-    const { chunks } = streamFeedXml(feed, getAppUrl());
+    const { chunks } = await streamFeedXml(feed, getAppUrl());
     let xml = "";
     let itemCount = 0;
     let truncated = false;
@@ -224,7 +202,7 @@ export default function EditFeedPage() {
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const { toastMessage, setToastMessage, copy } = useCopyToClipboard();
 
   // useLoaderData serializes Date -> string over the wire; convert back
   // before handing defaults to FeedForm, which works with real Date objects.
@@ -257,11 +235,6 @@ export default function EditFeedPage() {
           truncated: boolean;
         })
       : null;
-
-  async function copyToClipboard(text: string, label: string) {
-    await navigator.clipboard.writeText(text);
-    setToastMessage(`${label} copied to clipboard`);
-  }
 
   return (
     <>
@@ -429,11 +402,7 @@ export default function EditFeedPage() {
                     <Text as="span" tone="subdued">
                       {urls.publicUrl}
                     </Text>
-                    <Button
-                      onClick={() =>
-                        copyToClipboard(urls.publicUrl, "Public URL")
-                      }
-                    >
+                    <Button onClick={() => copy(urls.publicUrl, "Public URL")}>
                       Copy public URL
                     </Button>
                   </InlineStack>
@@ -442,9 +411,7 @@ export default function EditFeedPage() {
                       {urls.privateUrl}
                     </Text>
                     <Button
-                      onClick={() =>
-                        copyToClipboard(urls.privateUrl, "Private URL")
-                      }
+                      onClick={() => copy(urls.privateUrl, "Private URL")}
                     >
                       Copy private URL
                     </Button>

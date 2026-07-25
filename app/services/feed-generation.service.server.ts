@@ -6,6 +6,7 @@ import type { FeedTargeting } from "./feed-rules/query-builder.server";
 import { createEmptyStats } from "./feed-rules/types";
 import type { FeedGenerationStats } from "./feed-rules/types";
 import { feedService } from "./feed.service.server";
+import { settingsService } from "./settings.service.server";
 import { renderFeedXml } from "./xml/render-feed-xml.server";
 import { getFeedTemplate } from "./xml/templates/registry";
 
@@ -51,14 +52,21 @@ export interface StreamFeedXmlResult {
  * than only being available after iteration) so a caller — like the
  * "Generate Feed" history-recording action — can read final counts once
  * the stream finishes without needing a second pass over the data.
+ *
+ * Async because the per-platform generators (Google/Meta/TikTok) read
+ * shop-wide merchant configuration (Settings > Google Merchant / Meta
+ * Commerce / TikTok) for things like brand/condition/category/shipping —
+ * that's one small upfront read via the existing settingsService, not a
+ * per-item cost, so it doesn't affect streaming memory behavior.
  */
-export function streamFeedXml(
+export async function streamFeedXml(
   feed: FeedWithRule,
   appUrl: string,
-): StreamFeedXmlResult {
+): Promise<StreamFeedXmlResult> {
   const input = feedService.toFormInput(feed);
   const template = getFeedTemplate(feed.channel as FeedFormInput["channel"]);
   const stats = createEmptyStats();
+  const settings = await settingsService.getSettings(feed.shopId);
 
   const items = generateFeedItems({
     shopId: feed.shopId,
@@ -79,6 +87,7 @@ export function streamFeedXml(
       rootNode:
         feed.channel === "CUSTOM" ? feed.rootNode : template.defaultRootNode,
       itemNode: feed.channel === "CUSTOM" ? feed.itemNode : "item",
+      settings,
     },
     { pretty: feed.prettyPrint, cdata: feed.useCdata },
   );

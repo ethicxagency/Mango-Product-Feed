@@ -1,8 +1,18 @@
+import { nanoid } from "nanoid";
+
 import { db } from "~/lib/db.server";
-import type { FeedWithRule } from "~/repositories/feed.repository.server";
+import type {
+  FeedWithRule,
+  ListFeedsOptions,
+} from "~/repositories/feed.repository.server";
 import { feedRepository } from "~/repositories/feed.repository.server";
 import type { FeedFormInput } from "~/types/feed-form";
 import type { FeedStatus } from "~/types/feed";
+
+export type {
+  ListFeedsOptions,
+  FeedSortField,
+} from "~/repositories/feed.repository.server";
 
 function ruleDataFor(input: FeedFormInput) {
   return {
@@ -26,8 +36,8 @@ function ruleDataFor(input: FeedFormInput) {
 }
 
 export const feedService = {
-  async listFeeds(shopId: string) {
-    return feedRepository.listByShop(shopId);
+  async listFeeds(shopId: string, options?: ListFeedsOptions) {
+    return feedRepository.listByShop(shopId, options);
   },
 
   async getFeed(shopId: string, feedId: string) {
@@ -201,5 +211,12 @@ export const feedService = {
       name: `${input.name} (copy)`,
     });
     return duplicate;
+  },
+
+  /** Security > "Regenerate feed secret token" — rotates every feed's
+   * private-URL token at once. Any ad platform or integration still using
+   * the old private URL loses access immediately, which is the point. */
+  async regenerateAllSecretTokens(shopId: string): Promise<number> {
+    return feedRepository.regenerateAllSecretTokens(shopId, () => nanoid());
   },
 };

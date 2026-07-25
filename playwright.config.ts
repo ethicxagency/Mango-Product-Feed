@@ -2,12 +2,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  // Dev/test data lives in SQLite (see prisma/schema.prisma), which only
-  // allows one writer at a time. Running spec files in parallel workers
-  // causes concurrent Prisma writes across files to hit "database is
-  // locked" and intermittently fail feed create/update actions, so this
-  // suite runs fully serial. Production targets Postgres, where this
-  // constraint doesn't apply.
+  // Every spec file shares the single mock shop's catalog (see
+  // getCurrentShop's mock-mode fallback), not a per-worker-isolated one —
+  // running spec files in parallel workers would let concurrent tests
+  // mutate the same products/collections out from under each other, so
+  // this suite runs fully serial regardless of database engine.
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

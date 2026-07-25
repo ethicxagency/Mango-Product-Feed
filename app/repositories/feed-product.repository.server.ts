@@ -5,6 +5,7 @@ import { db } from "~/lib/db.server";
 export const feedProductInclude = {
   variants: true,
   images: true,
+  metafields: true,
 } satisfies Prisma.ProductInclude;
 
 export type FeedProductRow = Prisma.ProductGetPayload<{
