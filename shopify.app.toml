@@ -1,24 +1,26 @@
-# Shopify CLI app configuration. `client_id` is populated automatically the
-# first time you run `shopify app config link` (or `shopify app dev`) and
-# select/create the corresponding app in your Partner Dashboard — it does not
-# need to be filled in by hand.
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "10cb2fc0804731facb9113ccd99f2f22"
 name = "Mango Product Feed"
-client_id = ""
-application_url = "https://localhost:3000"
+application_url = "https://example.com"
 embedded = true
 
-[access_scopes]
-scopes = "read_products,read_inventory"
-
-[auth]
-redirect_urls = [
-  "https://localhost:3000/auth/callback",
-  "https://localhost:3000/auth/shopify/callback",
-  "https://localhost:3000/api/auth/callback",
-]
-
 [webhooks]
-api_version = "2025-01"
+api_version = "2026-07"
 
-[pos]
-embedded = false
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# Kept in sync with the `scopes` read in app/shopify.server.ts (SCOPES env
+# var, falling back to this same list) — least-privilege: only what
+# ProductSyncService/CollectionSyncService/InventorySyncService query.
+scopes = "read_products,read_inventory"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+# This app's authPathPrefix (app/shopify.server.ts) is "/auth", so
+# "/auth/callback" is the only OAuth callback route it actually serves.
+# `application_url` above is still the CLI's placeholder — replace both it
+# and the host below with the real production domain before `shopify app
+# deploy` (this file is static TOML, no env var interpolation).
+[auth]
+redirect_urls = ["https://example.com/auth/callback"]
