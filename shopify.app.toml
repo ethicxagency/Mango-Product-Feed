@@ -2,7 +2,7 @@
 
 client_id = "10cb2fc0804731facb9113ccd99f2f22"
 name = "Mango Product Feed"
-application_url = "https://example.com"
+application_url = "https://mango-product-feed.onrender.com"
 embedded = true
 
 [webhooks]
@@ -19,8 +19,5 @@ use_legacy_install_flow = false
 
 # This app's authPathPrefix (app/shopify.server.ts) is "/auth", so
 # "/auth/callback" is the only OAuth callback route it actually serves.
-# `application_url` above is still the CLI's placeholder — replace both it
-# and the host below with the real production domain before `shopify app
-# deploy` (this file is static TOML, no env var interpolation).
 [auth]
-redirect_urls = ["https://example.com/auth/callback"]
+redirect_urls = ["https://mango-product-feed.onrender.com/auth/callback"]
