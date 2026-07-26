@@ -1,11 +1,12 @@
-import type { LoaderFunctionArgs } from "@remix-run/node";
+import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { Frame, Navigation, Text } from "@shopify/polaris";
 import {
   CreditCardIcon,
   HomeIcon,
   ListBulletedIcon,
 } from "@shopify/polaris-icons";
-import { Link, Outlet, useLocation } from "@remix-run/react";
+import { boundary } from "@shopify/shopify-app-remix/server";
+import { Link, Outlet, useLocation, useRouteError } from "@remix-run/react";
 
 import { isMockModeEnabled } from "~/lib/mock-mode.server";
 import { authenticate } from "~/shopify.server";
@@ -117,3 +118,15 @@ export default function AppLayout() {
     </Frame>
   );
 }
+
+// Required so Remix forwards thrown Responses (e.g. the reauth redirect
+// authenticate.admin() issues when a session expires) with their embedded
+// CSP headers intact, instead of Remix's default error handling dropping
+// them.
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

@@ -6,6 +6,8 @@ import { RemixServer } from "@remix-run/react";
 import { isbot } from "isbot";
 import { renderToPipeableStream } from "react-dom/server";
 
+import { addDocumentResponseHeaders } from "~/shopify.server";
+
 export const streamTimeout = 5_000;
 
 export default function handleRequest(
@@ -15,6 +17,8 @@ export default function handleRequest(
   remixContext: EntryContext,
   _loadContext: AppLoadContext,
 ) {
+  addDocumentResponseHeaders(request, responseHeaders);
+
   return new Promise((resolve, reject) => {
     let shellRendered = false;
     const userAgent = request.headers.get("user-agent");
