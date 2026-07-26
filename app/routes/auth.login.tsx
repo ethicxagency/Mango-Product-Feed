@@ -45,7 +45,7 @@ export default function AuthLogin() {
       <Card>
         <Form method="post">
           <FormLayout>
-            <Text variant="headingLg" as="h1">
+            <Text variant="headingMd" as="h2">
               Log in
             </Text>
             <TextField
@@ -58,9 +58,7 @@ export default function AuthLogin() {
               autoComplete="on"
               error={errors.shop}
             />
-            <Button submit variant="primary">
-              Log in
-            </Button>
+            <Button submit>Log in</Button>
           </FormLayout>
         </Form>
       </Card>
