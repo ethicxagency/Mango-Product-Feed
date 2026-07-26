@@ -11,7 +11,7 @@ RUN npm run build
 
 FROM base AS runtime
 ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/prisma ./prisma
 COPY package.json ./
