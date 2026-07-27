@@ -108,6 +108,12 @@ const BILLING_PLANS: BillingConfig = {
   },
 };
 
+// The exact app URL registered with Shopify (same precedence Shopify itself
+// uses for OAuth's appUrl/redirect_urls) — exported so any other code that
+// needs to build an absolute URL Shopify will accept (e.g. a Billing API
+// returnUrl) uses this single resolved value instead of re-deriving it.
+export const appUrl = process.env.SHOPIFY_APP_URL ?? process.env.APP_URL ?? "";
+
 const shopify = shopifyApp({
   apiKey,
   apiSecretKey,
@@ -116,7 +122,7 @@ const shopify = shopifyApp({
   // actually query (products, variants, images, collections, inventory
   // quantity/policy). Keep this list in sync with shopify.app.toml.
   scopes: process.env.SCOPES?.split(",") ?? ["read_products", "read_inventory"],
-  appUrl: process.env.SHOPIFY_APP_URL ?? process.env.APP_URL ?? "",
+  appUrl,
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(db),
   distribution: AppDistribution.AppStore,

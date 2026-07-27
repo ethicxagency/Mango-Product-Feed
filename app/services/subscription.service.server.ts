@@ -5,7 +5,7 @@ import { db } from "~/lib/db.server";
 import { isMockModeEnabled } from "~/lib/mock-mode.server";
 import type { BillingCycle, PlanDefinition, PlanId } from "~/lib/plans";
 import { getPlan, resolvePlan } from "~/lib/plans";
-import { authenticate } from "~/shopify.server";
+import { appUrl, authenticate } from "~/shopify.server";
 
 /**
  * Shopify Managed Billing helpers — the only place in this app that talks
@@ -24,6 +24,53 @@ import { authenticate } from "~/shopify.server";
  * (Shopify never actually bills test charges). Flip via env var once the
  * app is genuinely live and approved for real billing. */
 const BILLING_TEST_MODE = process.env.SHOPIFY_BILLING_TEST_MODE !== "false";
+
+/**
+ * Builds the absolute URL Shopify's Billing API requires for `returnUrl`.
+ * appSubscriptionCreate's $returnUrl variable is typed `URL!` in Shopify's
+ * GraphQL schema — a relative path like "/app/plans" is not a valid value
+ * for that scalar and is rejected with "was provided invalid value" before
+ * the mutation even runs. This always resolves against the same `appUrl`
+ * shopify.server.ts registers with Shopify for OAuth, so the returnUrl's
+ * host is guaranteed to be the one Shopify already trusts for this app.
+ */
+function buildBillingReturnUrl(path: string): string {
+  if (!appUrl) {
+    throw new Response(
+      "Cannot build a billing returnUrl: SHOPIFY_APP_URL/APP_URL is not set.",
+      { status: 500 },
+    );
+  }
+
+  const base = appUrl.replace(/\/+$/, "");
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  const returnUrl = `${base}${suffix}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(returnUrl);
+  } catch {
+    throw new Response(
+      `Cannot build a billing returnUrl: "${returnUrl}" is not a valid absolute URL.`,
+      { status: 500 },
+    );
+  }
+
+  if (parsed.protocol !== "https:") {
+    if (process.env.NODE_ENV === "production" || parsed.hostname !== "localhost") {
+      throw new Response(
+        `Refusing to send a non-HTTPS billing returnUrl to Shopify: "${returnUrl}". ` +
+          "Check SHOPIFY_APP_URL/APP_URL — Shopify requires an https:// URL.",
+        { status: 500 },
+      );
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(`[billing] returnUrl: ${returnUrl}`);
+
+  return returnUrl;
+}
 
 export interface CurrentPlanSummary {
   plan: PlanDefinition;
@@ -101,7 +148,7 @@ export const subscriptionService = {
     await billing.request({
       plan: billingKey,
       isTest: BILLING_TEST_MODE,
-      returnUrl: "/app/plans",
+      returnUrl: buildBillingReturnUrl("/app/plans"),
     });
   },
 
