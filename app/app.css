@@ -3,10 +3,30 @@
 .mango-sidebar-footer {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  gap: var(--p-space-100);
-  text-align: right;
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.mango-sidebar-footer__logo {
+  display: block;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.mango-sidebar-footer__name {
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.mango-sidebar-footer__name p {
+  font-weight: 600 !important;
+}
+
+.mango-sidebar-footer__tagline {
+  max-width: 180px;
 }
 
 /* The footer must look identical on hover — no fade, no hidden content, no

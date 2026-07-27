@@ -74,17 +74,26 @@ export default function AppLayout() {
           <div
             className="mango-sidebar-footer"
             style={{
-              padding: "var(--p-space-400)",
               borderTop: "1px solid var(--p-color-border-secondary)",
             }}
           >
-            <img src="/footer-logo.png" alt="" width={28} height={28} />
-            <Text as="p" variant="bodySm" fontWeight="medium">
-              Mango Product Feed
-            </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Built by Nextup Global, LLC for merchants.
-            </Text>
+            <img
+              src="/footer-logo.png"
+              alt=""
+              width={36}
+              height={36}
+              className="mango-sidebar-footer__logo"
+            />
+            <div className="mango-sidebar-footer__name">
+              <Text as="p" variant="bodySm" alignment="center">
+                Mango Product Feed
+              </Text>
+            </div>
+            <div className="mango-sidebar-footer__tagline">
+              <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                Built by Nextup Global, LLC for merchants.
+              </Text>
+            </div>
           </div>
         </div>
       }
