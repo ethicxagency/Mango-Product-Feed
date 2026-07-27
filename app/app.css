@@ -1,142 +1,19 @@
 @import "tailwindcss";
 
-/* ==========================================================================
-   Sidebar — custom-built nav (not Polaris's <Navigation>) so exact spacing/
-   sizing can be hit precisely; colors and font-family still inherit from
-   Polaris's own CSS custom properties throughout.
-   ========================================================================== */
-
-.mango-sidebar {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 244px;
-  background: #f6f6f7;
-}
-
-.mango-sidebar-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-}
-
-.mango-sidebar-nav {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0 12px;
-  overflow-y: auto;
-}
-
-.mango-nav-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 44px;
-  padding: 0 16px;
-  border-radius: 12px;
-  color: var(--p-color-text);
-  text-decoration: none;
-  transition:
-    background-color 150ms ease,
-    box-shadow 150ms ease;
-}
-
-.mango-nav-item:hover {
-  background-color: #f1f2f3;
-}
-
-.mango-nav-item:focus-visible {
-  outline: 2px solid var(--p-color-border-focus);
-  outline-offset: 2px;
-}
-
-.mango-nav-item--active {
-  background-color: #ffffff;
-  box-shadow: var(--p-shadow-100);
-}
-
-.mango-nav-item--active:hover {
-  background-color: #ffffff;
-}
-
-.mango-nav-item--active::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 0 4px 4px 0;
-  background: var(--p-color-icon);
-}
-
-.mango-nav-item__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.mango-nav-item__label {
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.3;
-}
-
-.mango-nav-item--active .mango-nav-item__label {
-  font-weight: 600;
-}
-
 .mango-sidebar-footer {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid var(--p-color-border-secondary);
-  transition: background-color 150ms ease;
-}
-
-.mango-sidebar-footer:hover {
-  background-color: #f1f2f3;
-}
-
-.mango-sidebar-footer__logo {
-  flex-shrink: 0;
-  border-radius: 8px;
-  display: block;
-}
-
-.mango-sidebar-footer__text {
-  display: flex;
   flex-direction: column;
-  min-width: 0;
-  gap: 2px;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--p-space-100);
+  text-align: right;
 }
 
-.mango-sidebar-footer__name {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--p-color-text);
-}
-
-.mango-sidebar-footer__tagline {
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.3;
-  color: var(--p-color-text-secondary);
-}
-
-/* The footer must never hide content on hover — only its background may
-   change. Opacity/visibility/filter are pinned so nothing can fade out,
-   regardless of any ambient hover CSS elsewhere in the app. */
+/* The footer must look identical on hover — no fade, no hidden content, no
+   color shift. This overrides any inherited hover behavior (e.g. from
+   Polaris's nav-item hover treatment) rather than relying on removing it
+   at the source, since plain divs/Text/img here don't opt into that
+   treatment themselves but can still inherit ambient hover CSS. */
 .mango-sidebar-footer,
 .mango-sidebar-footer *,
 .mango-sidebar-footer:hover,
@@ -144,7 +21,24 @@
   opacity: 1 !important;
   visibility: visible !important;
   filter: none !important;
+  transition: none !important;
   animation: none !important;
+}
+
+/* Sidebar navigation polish — additive refinement on top of Polaris's own
+   Navigation component (active/selected states are still fully driven by
+   Polaris; this only adds rounded corners, comfortable spacing, and a
+   smooth transition so hover/active feel a little more premium). */
+.Polaris-Frame__Navigation .Polaris-Navigation__Item {
+  border-radius: var(--p-border-radius-200);
+  margin-inline: var(--p-space-200);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.Polaris-Frame__Navigation .Polaris-Navigation__ItemInnerWrapper {
+  border-radius: var(--p-border-radius-200);
 }
 
 /* Quick action cards */

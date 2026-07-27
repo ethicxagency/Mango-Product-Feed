@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { Frame } from "@shopify/polaris";
+import { Frame, Navigation, Text } from "@shopify/polaris";
 import {
   CreditCardIcon,
   HomeIcon,
@@ -8,9 +8,6 @@ import {
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { Outlet, useLocation, useRouteError } from "@remix-run/react";
 
-import { SidebarFooter } from "~/components/sidebar/SidebarFooter";
-import { SidebarHeader } from "~/components/sidebar/SidebarHeader";
-import { SidebarNavItem } from "~/components/sidebar/SidebarNavItem";
 import { isMockModeEnabled } from "~/lib/mock-mode.server";
 import { authenticate } from "~/shopify.server";
 
@@ -38,29 +35,57 @@ export default function AppLayout() {
         width: 36,
       }}
       navigation={
-        <div className="mango-sidebar">
-          <SidebarHeader />
-          <nav className="mango-sidebar-nav" aria-label="Primary">
-            <SidebarNavItem
-              url="/app"
-              label="Dashboard"
-              icon={HomeIcon}
-              selected={location.pathname === "/app"}
-            />
-            <SidebarNavItem
-              url="/app/feeds"
-              label="Feeds"
-              icon={ListBulletedIcon}
-              selected={location.pathname.startsWith("/app/feeds")}
-            />
-            <SidebarNavItem
-              url="/app/plans"
-              label="Plans"
-              icon={CreditCardIcon}
-              selected={location.pathname.startsWith("/app/plans")}
-            />
-          </nav>
-          <SidebarFooter />
+        <div
+          style={{ display: "flex", flexDirection: "column", height: "100%" }}
+        >
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <Navigation location={location.pathname}>
+              <Navigation.Section
+                items={[
+                  {
+                    url: "/app",
+                    label: "Dashboard",
+                    icon: HomeIcon,
+                    selected: location.pathname === "/app",
+                  },
+                  {
+                    url: "/app/feeds",
+                    label: "Feeds",
+                    icon: ListBulletedIcon,
+                    selected: location.pathname.startsWith("/app/feeds"),
+                  },
+                  {
+                    url: "/app/plans",
+                    label: "Plans",
+                    icon: CreditCardIcon,
+                    selected: location.pathname.startsWith("/app/plans"),
+                  },
+                ]}
+              />
+            </Navigation>
+          </div>
+          <div
+            className="mango-sidebar-footer"
+            style={{
+              padding: "var(--p-space-400)",
+              borderTop: "1px solid var(--p-color-border-secondary)",
+            }}
+          >
+            <img src="/footer-logo.png" alt="" width={28} height={28} />
+            <Text as="p" variant="bodySm" fontWeight="medium">
+              Mango Product Feed
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Built by Nextup Global, LLC for merchants.
+            </Text>
+          </div>
         </div>
       }
     >
