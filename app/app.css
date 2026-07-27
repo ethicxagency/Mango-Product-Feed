@@ -25,6 +25,81 @@
   animation: none !important;
 }
 
+/* Sidebar navigation polish — additive refinement on top of Polaris's own
+   Navigation component (active/selected states are still fully driven by
+   Polaris; this only adds rounded corners, comfortable spacing, and a
+   smooth transition so hover/active feel a little more premium). */
+.Polaris-Frame__Navigation .Polaris-Navigation__Item {
+  border-radius: var(--p-border-radius-200);
+  margin-inline: var(--p-space-200);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.Polaris-Frame__Navigation .Polaris-Navigation__ItemInnerWrapper {
+  border-radius: var(--p-border-radius-200);
+}
+
+/* Quick action cards */
+.mango-quick-action {
+  display: block;
+  background: var(--p-color-bg-surface);
+  border: 1px solid var(--p-color-border-secondary);
+  border-radius: var(--p-border-radius-300);
+  padding: var(--p-space-400);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    border-color 150ms ease;
+}
+
+.mango-quick-action:hover {
+  box-shadow: var(--p-shadow-200);
+  border-color: var(--p-color-border);
+  transform: translateY(-1px);
+}
+
+.mango-quick-action:focus-visible {
+  outline: 2px solid var(--p-color-border-focus);
+  outline-offset: 2px;
+}
+
+.mango-quick-action__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--p-border-radius-200);
+  background: var(--p-color-bg-surface-secondary);
+  flex-shrink: 0;
+}
+
+/* Product breakdown bar */
+.mango-breakdown-track {
+  display: flex;
+  width: 100%;
+  height: 8px;
+  border-radius: var(--p-border-radius-full);
+  overflow: hidden;
+  background: var(--p-color-bg-surface-tertiary);
+}
+
+.mango-breakdown-segment {
+  height: 100%;
+}
+
+.mango-breakdown-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
 .toggle-switch {
   display: inline-flex;
   align-items: center;
