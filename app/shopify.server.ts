@@ -2,13 +2,16 @@ import "@shopify/shopify-app-remix/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
+  BillingInterval,
   DeliveryMethod,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
+import type { BillingConfig } from "@shopify/shopify-api";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 
 import { db } from "~/lib/db.server";
 import { isMockModeEnabled } from "~/lib/mock-mode.server";
+import { PLANS } from "~/lib/plans";
 import { runInitialSync } from "~/services/shopify/initial-sync.server";
 
 // The Shopify API client validates its config eagerly at import time, so
@@ -30,7 +33,80 @@ export const WEBHOOK_TOPICS = {
   COLLECTIONS_UPDATE: "/webhooks/collections/update",
   COLLECTIONS_DELETE: "/webhooks/collections/delete",
   APP_UNINSTALLED: "/webhooks/app/uninstalled",
+  APP_SUBSCRIPTIONS_UPDATE: "/webhooks/app-subscriptions/update",
 } as const;
+
+// Shopify Managed Billing plan catalog — one entry per paid plan × billing
+// cycle (STARTER_MONTHLY, STARTER_YEARLY, GROWTH_MONTHLY, ...). Prices/trial
+// days are read from the single source of truth in app/lib/plans.ts so they
+// can never drift between the pricing page and what Shopify actually
+// charges. The Free plan has no entry here — it's never billed.
+const STARTER_BILLING = PLANS.find((plan) => plan.id === "STARTER")!.billing!;
+const GROWTH_BILLING = PLANS.find((plan) => plan.id === "GROWTH")!.billing!;
+const PRO_BILLING = PLANS.find((plan) => plan.id === "PRO")!.billing!;
+
+const BILLING_PLANS: BillingConfig = {
+  [STARTER_BILLING.monthlyKey]: {
+    trialDays: 7,
+    lineItems: [
+      {
+        amount: STARTER_BILLING.monthlyPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      },
+    ],
+  },
+  [STARTER_BILLING.yearlyKey]: {
+    trialDays: 7,
+    lineItems: [
+      {
+        amount: STARTER_BILLING.yearlyPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      },
+    ],
+  },
+  [GROWTH_BILLING.monthlyKey]: {
+    trialDays: 7,
+    lineItems: [
+      {
+        amount: GROWTH_BILLING.monthlyPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      },
+    ],
+  },
+  [GROWTH_BILLING.yearlyKey]: {
+    trialDays: 7,
+    lineItems: [
+      {
+        amount: GROWTH_BILLING.yearlyPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      },
+    ],
+  },
+  [PRO_BILLING.monthlyKey]: {
+    trialDays: 7,
+    lineItems: [
+      {
+        amount: PRO_BILLING.monthlyPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      },
+    ],
+  },
+  [PRO_BILLING.yearlyKey]: {
+    trialDays: 7,
+    lineItems: [
+      {
+        amount: PRO_BILLING.yearlyPrice,
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      },
+    ],
+  },
+};
 
 const shopify = shopifyApp({
   apiKey,
@@ -44,6 +120,7 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(db),
   distribution: AppDistribution.AppStore,
+  billing: BILLING_PLANS,
   webhooks: Object.fromEntries(
     Object.entries(WEBHOOK_TOPICS).map(([topic, callbackUrl]) => [
       topic,

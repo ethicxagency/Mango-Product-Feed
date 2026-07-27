@@ -1,0 +1,384 @@
+import type { AppSubscription } from "@shopify/shopify-api";
+import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
+
+import { db } from "~/lib/db.server";
+import { isMockModeEnabled } from "~/lib/mock-mode.server";
+import type { BillingCycle, PlanDefinition, PlanId } from "~/lib/plans";
+import { getPlan, resolvePlan } from "~/lib/plans";
+import { authenticate } from "~/shopify.server";
+
+/**
+ * Shopify Managed Billing helpers — the only place in this app that talks
+ * to Shopify's AppSubscription API (via authenticate.admin(request).billing)
+ * or writes to the Subscription table. Every route that touches billing
+ * goes through these functions rather than calling billing.request/check/
+ * cancel or db.subscription directly, so the "never trust frontend state,
+ * always verify from Shopify" rule has exactly one enforcement point.
+ *
+ * Mock mode (no real Shopify session) simulates the same state machine
+ * entirely in Postgres, matching the rest of this app's mock-mode pattern —
+ * see shopify.server.ts and getCurrentShop.
+ */
+
+/** Development stores and apps not yet public should charge in test mode
+ * (Shopify never actually bills test charges). Flip via env var once the
+ * app is genuinely live and approved for real billing. */
+const BILLING_TEST_MODE = process.env.SHOPIFY_BILLING_TEST_MODE !== "false";
+
+export interface CurrentPlanSummary {
+  plan: PlanDefinition;
+  billingCycle: BillingCycle | null;
+  status: string;
+  isTest: boolean;
+  trialEndsAt: Date | null;
+  currentPeriodEnd: Date | null;
+  isTrialActive: boolean;
+}
+
+/** True only when a real, unexpired trial end date is on record — never
+ * inferred from plan metadata alone, since Shopify (not this app) is the
+ * source of truth for whether a trial was already consumed. */
+export function isTrialActive(trialEndsAt: Date | null): boolean {
+  return trialEndsAt !== null && trialEndsAt.getTime() > Date.now();
+}
+
+export const subscriptionService = {
+  /** Reads the shop's current plan + subscription state straight from the
+   * database, which is kept in sync by verifySubscription() (called on
+   * every Plans page load) and the app_subscriptions/update webhook — never
+   * trust a value the client claims, always resolve it here. */
+  async getCurrentPlan(shopId: string): Promise<CurrentPlanSummary> {
+    const [shop, subscription] = await Promise.all([
+      db.shop.findUniqueOrThrow({ where: { id: shopId } }),
+      db.subscription.findUnique({ where: { shopId } }),
+    ]);
+
+    const plan = resolvePlan(subscription?.planId ?? shop.planName);
+    const trialEndsAt = subscription?.trialEndsAt ?? null;
+
+    return {
+      plan,
+      billingCycle: (subscription?.billingCycle as BillingCycle | null) ?? null,
+      status: subscription?.status ?? "ACTIVE",
+      isTest: subscription?.isTest ?? false,
+      trialEndsAt,
+      currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+      isTrialActive: isTrialActive(trialEndsAt),
+    };
+  },
+
+  /** Starts a Shopify Managed Billing subscription for a paid plan. Always
+   * ends by throwing a redirect — either straight to Shopify's approval
+   * page (real mode) — never by writing the subscription to the database
+   * before Shopify has actually confirmed it. Mock mode has no real
+   * confirmation page to redirect through, so it writes the equivalent
+   * "approved" state directly via mockApproveSubscription and returns
+   * normally instead of redirecting. */
+  async createSubscription({
+    request,
+    shopId,
+    planId,
+    billingCycle,
+  }: {
+    request: Request;
+    shopId: string;
+    planId: PlanId;
+    billingCycle: BillingCycle;
+  }): Promise<void> {
+    const plan = getPlan(planId);
+    if (!plan?.billing) {
+      throw new Response("Unknown or non-billable plan", { status: 400 });
+    }
+
+    if (isMockModeEnabled()) {
+      await subscriptionService.mockApproveSubscription(shopId, planId, billingCycle);
+      return;
+    }
+
+    const billingKey =
+      billingCycle === "MONTHLY" ? plan.billing.monthlyKey : plan.billing.yearlyKey;
+    const { billing } = await authenticate.admin(request);
+    await billing.request({
+      plan: billingKey,
+      isTest: BILLING_TEST_MODE,
+      returnUrl: "/app/plans",
+    });
+  },
+
+  /** Cancels the shop's active Shopify subscription (if any) and reverts
+   * the shop to the Free plan. Mirrors createSubscription: real mode calls
+   * the Shopify Admin API first and only updates the database with what
+   * Shopify actually confirmed. */
+  async cancelSubscription({
+    request,
+    shopId,
+  }: {
+    request: Request;
+    shopId: string;
+  }): Promise<void> {
+    const subscription = await db.subscription.findUnique({
+      where: { shopId },
+    });
+
+    if (!subscription?.shopifySubscriptionId) {
+      // Nothing to cancel with Shopify (e.g. already Free) — just make
+      // sure the local row agrees.
+      await downgradeToFree(shopId);
+      return;
+    }
+
+    if (!isMockModeEnabled()) {
+      const { billing } = await authenticate.admin(request);
+      await billing.cancel({
+        subscriptionId: subscription.shopifySubscriptionId,
+        prorate: true,
+        isTest: subscription.isTest,
+      });
+    }
+
+    await downgradeToFree(shopId);
+  },
+
+  /** Re-checks the shop's billing state against Shopify's Admin GraphQL API
+   * (billing.check) and writes whatever Shopify reports into the
+   * Subscription/Shop tables. This is the "never trust frontend state"
+   * enforcement point — call it on every Plans page load and right after
+   * returning from Shopify's approval page, in addition to the webhook. */
+  async verifySubscription({
+    request,
+    shopId,
+  }: {
+    request: Request;
+    shopId: string;
+  }): Promise<CurrentPlanSummary> {
+    if (isMockModeEnabled()) {
+      // Mock mode has no real Shopify billing API to check against — the
+      // database row created by the mock-approve redirect (see the
+      // mockApprove branch in app.plans.tsx) is already the source of
+      // truth, so just read it back.
+      return subscriptionService.getCurrentPlan(shopId);
+    }
+
+    const { billing } = await authenticate.admin(request);
+    const { appSubscriptions } = await billing.check({ isTest: BILLING_TEST_MODE });
+
+    const active = appSubscriptions.find(
+      (sub) => sub.status === "ACTIVE" || sub.status === "ACCEPTED",
+    );
+
+    if (active) {
+      await syncSubscriptionFromShopify(shopId, active);
+    } else {
+      // No active subscription — Shopify's the source of truth, so
+      // downgrade locally rather than trusting stale local state.
+      const current = await db.subscription.findUnique({ where: { shopId } });
+      if (current?.shopifySubscriptionId) {
+        await downgradeToFree(shopId);
+      }
+    }
+
+    return subscriptionService.getCurrentPlan(shopId);
+  },
+
+  /** Thin wrapper around authenticate.admin(request).billing.require — for
+   * gating a specific route/feature behind an active paid plan. Not
+   * currently wired into any route (this app's Free tier is fully
+   * functional on its own; billing gates usage limits, not access), but
+   * provided as the reusable primitive the rest of this service is built
+   * on, exactly as named in the task spec. */
+  async requireBilling({
+    request,
+    plans,
+    onFailure,
+  }: {
+    request: Request;
+    plans: string[];
+    onFailure: (error: unknown) => Promise<Response>;
+  }) {
+    const { billing } = await authenticate.admin(request);
+    return billing.require({
+      plans,
+      isTest: BILLING_TEST_MODE,
+      onFailure,
+    });
+  },
+
+  /** Mock-mode-only counterpart to a merchant approving the Shopify
+   * confirmation page — writes the same Subscription shape
+   * syncSubscriptionFromShopify would, with a synthesized subscription id
+   * and dates, so the Plans page behaves identically to real mode without a
+   * live Shopify session. Called from app.plans.tsx's loader after the
+   * mockApprove redirect createSubscription() issues in mock mode. */
+  async mockApproveSubscription(
+    shopId: string,
+    planId: PlanId,
+    billingCycle: BillingCycle,
+  ): Promise<void> {
+    if (!isMockModeEnabled()) {
+      throw new Response("mockApproveSubscription is mock-mode only", {
+        status: 403,
+      });
+    }
+
+    const plan = getPlan(planId);
+    if (!plan?.billing) {
+      throw new Response("Unknown or non-billable plan", { status: 400 });
+    }
+
+    const now = Date.now();
+    const periodDays = billingCycle === "MONTHLY" ? 30 : 365;
+
+    await db.$transaction([
+      db.shop.update({ where: { id: shopId }, data: { planName: plan.id } }),
+      db.subscription.upsert({
+        where: { shopId },
+        create: {
+          shopId,
+          planId: plan.id,
+          billingCycle,
+          shopifySubscriptionId: `gid://shopify/AppSubscription/mock-${shopId}-${now}`,
+          status: "ACTIVE",
+          isTest: true,
+          trialEndsAt: new Date(now + 7 * 24 * 60 * 60 * 1000),
+          currentPeriodEnd: new Date(now + periodDays * 24 * 60 * 60 * 1000),
+        },
+        update: {
+          planId: plan.id,
+          billingCycle,
+          shopifySubscriptionId: `gid://shopify/AppSubscription/mock-${shopId}-${now}`,
+          status: "ACTIVE",
+          isTest: true,
+          trialEndsAt: new Date(now + 7 * 24 * 60 * 60 * 1000),
+          currentPeriodEnd: new Date(now + periodDays * 24 * 60 * 60 * 1000),
+        },
+      }),
+    ]);
+  },
+};
+
+export async function downgradeToFree(shopId: string): Promise<void> {
+  await db.$transaction([
+    db.shop.update({ where: { id: shopId }, data: { planName: "FREE" } }),
+    db.subscription.upsert({
+      where: { shopId },
+      create: { shopId, planId: "FREE", status: "ACTIVE" },
+      update: {
+        planId: "FREE",
+        billingCycle: null,
+        shopifySubscriptionId: null,
+        status: "ACTIVE",
+        isTest: false,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+      },
+    }),
+  ]);
+}
+
+/** Maps a confirmed Shopify AppSubscription back to one of this app's plan
+ * ids/billing cycles by matching the subscription name against the plan
+ * keys configured in shopify.server.ts (Shopify's own AppSubscription.name
+ * is exactly the config key we passed to billing.request). */
+function resolvePlanFromSubscriptionName(
+  name: string,
+): { planId: PlanId; billingCycle: BillingCycle } | null {
+  const match = /^(STARTER|GROWTH|PRO)_(MONTHLY|YEARLY)$/.exec(name);
+  if (!match) return null;
+  return {
+    planId: match[1] as PlanId,
+    billingCycle: match[2] as BillingCycle,
+  };
+}
+
+export async function syncSubscriptionFromShopify(
+  shopId: string,
+  subscription: AppSubscription,
+): Promise<void> {
+  const resolved = resolvePlanFromSubscriptionName(subscription.name);
+  if (!resolved) return;
+
+  const trialEndsAt =
+    subscription.trialDays > 0
+      ? new Date(
+          new Date(subscription.createdAt).getTime() +
+            subscription.trialDays * 24 * 60 * 60 * 1000,
+        )
+      : null;
+
+  await db.$transaction([
+    db.shop.update({
+      where: { id: shopId },
+      data: { planName: resolved.planId },
+    }),
+    db.subscription.upsert({
+      where: { shopId },
+      create: {
+        shopId,
+        planId: resolved.planId,
+        billingCycle: resolved.billingCycle,
+        shopifySubscriptionId: subscription.id,
+        status: subscription.status,
+        isTest: subscription.test,
+        trialEndsAt,
+        currentPeriodEnd: new Date(subscription.currentPeriodEnd),
+      },
+      update: {
+        planId: resolved.planId,
+        billingCycle: resolved.billingCycle,
+        shopifySubscriptionId: subscription.id,
+        status: subscription.status,
+        isTest: subscription.test,
+        trialEndsAt,
+        currentPeriodEnd: new Date(subscription.currentPeriodEnd),
+      },
+    }),
+  ]);
+}
+
+const ACTIVE_SUBSCRIPTIONS_QUERY = `#graphql
+  query ActiveSubscriptions {
+    currentAppInstallation {
+      activeSubscriptions {
+        id
+        name
+        test
+        status
+        trialDays
+        createdAt
+        currentPeriodEnd
+      }
+    }
+  }
+`;
+
+/** Called from the app_subscriptions/update webhook, where there's no
+ * authenticate.admin(request) session to build a billing.check() call from
+ * — only the admin GraphQL client the webhook handler already has. Queries
+ * the same underlying data billing.check() would and syncs it the same way
+ * verifySubscription() does. */
+export async function syncSubscriptionFromWebhook(
+  shopId: string,
+  admin: AdminApiContext,
+): Promise<void> {
+  const response = await admin.graphql(ACTIVE_SUBSCRIPTIONS_QUERY);
+  const { data } = (await response.json()) as {
+    data?: {
+      currentAppInstallation?: {
+        activeSubscriptions: AppSubscription[];
+      };
+    };
+  };
+
+  const active = data?.currentAppInstallation?.activeSubscriptions.find(
+    (sub) => sub.status === "ACTIVE" || sub.status === "ACCEPTED",
+  );
+
+  if (active) {
+    await syncSubscriptionFromShopify(shopId, active);
+  } else {
+    const current = await db.subscription.findUnique({ where: { shopId } });
+    if (current?.shopifySubscriptionId) {
+      await downgradeToFree(shopId);
+    }
+  }
+}

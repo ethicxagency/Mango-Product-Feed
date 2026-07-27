@@ -1,16 +1,32 @@
 export const PLAN_IDS = ["FREE", "STARTER", "GROWTH", "PRO"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
+export const BILLING_CYCLES = ["MONTHLY", "YEARLY"] as const;
+export type BillingCycle = (typeof BILLING_CYCLES)[number];
+
 export interface PlanOverage {
   products: number;
   variants: number;
   price: number;
 }
 
+/** Shopify Managed Billing plan config key (shopify.server.ts `billing`
+ * option) for a paid plan's monthly/yearly line item. Free has neither. */
+export interface PlanBilling {
+  monthlyKey: string;
+  yearlyKey: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  /** Rounded display percentage — yearlyPrice is already discounted; this
+   * is derived, not independently configurable, so the two can never
+   * silently drift apart. */
+  yearlyDiscountPercent: number;
+}
+
 export interface PlanDefinition {
   id: PlanId;
   name: string;
-  price: number | null; // null => Free
+  price: number | null; // null => Free; monthly price for paid plans
   priceLabel: string;
   maxProducts: number | null; // null => unlimited
   maxVariants: number | null;
@@ -24,6 +40,28 @@ export interface PlanDefinition {
   features: string[];
   /** Highlighted as the suggested plan on the pricing page. */
   recommended?: boolean;
+  /** Absent for FREE — every paid plan has both a monthly and yearly
+   * Shopify Managed Billing plan. */
+  billing?: PlanBilling;
+}
+
+function yearlyDiscountPercent(monthly: number, yearly: number): number {
+  const fullYearPrice = monthly * 12;
+  return Math.round((1 - yearly / fullYearPrice) * 100);
+}
+
+function planBilling(
+  idPrefix: string,
+  monthlyPrice: number,
+  yearlyPrice: number,
+): PlanBilling {
+  return {
+    monthlyKey: `${idPrefix}_MONTHLY`,
+    yearlyKey: `${idPrefix}_YEARLY`,
+    monthlyPrice,
+    yearlyPrice,
+    yearlyDiscountPercent: yearlyDiscountPercent(monthlyPrice, yearlyPrice),
+  };
 }
 
 export const PLANS: PlanDefinition[] = [
@@ -59,6 +97,7 @@ export const PLANS: PlanDefinition[] = [
     supportLevel: "Priority email support",
     trialDays: 7,
     overage: { products: 100, variants: 200, price: 0.05 },
+    billing: planBilling("STARTER", 1.99, 19.1),
     features: [
       "Up to 2,000 products",
       "Up to 5,000 variants",
@@ -82,6 +121,7 @@ export const PLANS: PlanDefinition[] = [
     multiMarket: true,
     overage: { products: 100, variants: 200, price: 0.04 },
     recommended: true,
+    billing: planBilling("GROWTH", 3.49, 33.5),
     features: [
       "Up to 5,000 products",
       "Up to 20,000 variants",
@@ -102,7 +142,9 @@ export const PLANS: PlanDefinition[] = [
     syncFrequencyHours: 1,
     syncFrequencyLabel: "Automatic feed sync every 1 hour",
     supportLevel: "Priority support (email)",
+    trialDays: 7,
     multiMarket: true,
+    billing: planBilling("PRO", 6.99, 67.1),
     features: [
       "Unlimited products",
       "Unlimited variants",
@@ -113,6 +155,16 @@ export const PLANS: PlanDefinition[] = [
     ],
   },
 ];
+
+/** Ordering used to tell an "Upgrade" from a "Downgrade" on the pricing
+ * page — index in this array, not price, since Free has no price to
+ * compare against. */
+export const PLAN_RANK: Record<PlanId, number> = {
+  FREE: 0,
+  STARTER: 1,
+  GROWTH: 2,
+  PRO: 3,
+};
 
 export function getPlan(id: string): PlanDefinition | undefined {
   return PLANS.find((p) => p.id === id);

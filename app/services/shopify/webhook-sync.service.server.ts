@@ -82,12 +82,24 @@ export const webhookSyncService = {
    * state rather than erroring on missing data. Sessions, however, are no
    * longer valid once the merchant uninstalls (the access token is
    * revoked on Shopify's side), so those are cleaned up per Shopify's
-   * documented best practice for the app/uninstalled webhook. */
+   * documented best practice for the app/uninstalled webhook. Shopify also
+   * cancels any active AppSubscription server-side on uninstall, so the
+   * local Subscription row is marked CANCELLED to match — not deleted, so
+   * plan history survives a reinstall. */
   async handleAppUninstalled(shopDomain: string): Promise<void> {
+    const shop = await db.shop.findUnique({ where: { shopifyDomain: shopDomain } });
+
     await db.shop.updateMany({
       where: { shopifyDomain: shopDomain },
       data: { isActive: false },
     });
+
+    if (shop) {
+      await db.subscription.updateMany({
+        where: { shopId: shop.id },
+        data: { status: "CANCELLED" },
+      });
+    }
 
     const sessions = await sessionStorage.findSessionsByShop(shopDomain);
     if (sessions.length > 0) {

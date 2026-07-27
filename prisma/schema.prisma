@@ -54,13 +54,56 @@ model Shop {
   primaryDomain String @default("")
   shopOwnerName String @default("")
 
-  products    Product[]
-  collections Collection[]
-  feeds       Feed[]
-  tags        Tag[]
-  settings    Settings?
+  products     Product[]
+  collections  Collection[]
+  feeds        Feed[]
+  tags         Tag[]
+  settings     Settings?
+  subscription Subscription?
 
   @@map("shops")
+}
+
+// ---------------------------------------------------------------------------
+// Subscription — mirrors the shop's Shopify Managed Billing AppSubscription.
+// One active subscription per shop; FREE plan has no Shopify subscription at
+// all (shopifySubscriptionId stays null), everything else is created via
+// billing.request() and kept in sync via the app_subscriptions/update
+// webhook (see webhooks.app-subscriptions.update.tsx).
+// ---------------------------------------------------------------------------
+
+model Subscription {
+  id     String @id @default(cuid())
+  shopId String @unique
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // FREE | STARTER | GROWTH | PRO — kept independent of Shop.planName so
+  // billing state has a single source of truth; Shop.planName remains for
+  // display/usage-limit lookups elsewhere and is updated in lockstep.
+  planId String @default("FREE")
+
+  // MONTHLY | YEARLY | null for the Free plan (no recurring charge at all).
+  billingCycle String?
+
+  // gid://shopify/AppSubscription/... — null while on the Free plan.
+  shopifySubscriptionId String? @unique
+
+  // Mirrors AppSubscription.status: ACTIVE | CANCELLED | PENDING | DECLINED
+  // | EXPIRED | FROZEN | ACCEPTED. Free plan uses "ACTIVE" with no
+  // subscription id to mean "no billing required".
+  status String @default("ACTIVE")
+
+  // True for subscriptions created with isTest: true (development stores /
+  // test charges) — never actually billed by Shopify.
+  isTest Boolean @default(false)
+
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
 }
 
 // ---------------------------------------------------------------------------

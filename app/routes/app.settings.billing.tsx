@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { Link, useLoaderData } from "@remix-run/react";
 import {
   Badge,
   BlockStack,
@@ -14,16 +14,22 @@ import {
 
 import { getCurrentShop } from "~/lib/current-shop.server";
 import { db } from "~/lib/db.server";
+import { subscriptionService } from "~/services/subscription.service.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const shop = await getCurrentShop(request);
-  const [productsUsed, feedsUsed] = await Promise.all([
+  const [current, productsUsed, feedsUsed] = await Promise.all([
+    subscriptionService.getCurrentPlan(shop.id),
     db.product.count({ where: { shopId: shop.id, deletedAt: null } }),
     db.feed.count({ where: { shopId: shop.id } }),
   ]);
 
   return json({
-    planName: shop.planName,
+    planName: current.plan.name,
+    billingCycle: current.billingCycle,
+    isTrialActive: current.isTrialActive,
+    trialEndsAt: current.trialEndsAt?.toISOString() ?? null,
+    currentPeriodEnd: current.currentPeriodEnd?.toISOString() ?? null,
     productsUsed,
     feedsUsed,
   });
@@ -42,17 +48,43 @@ export default function BillingSettingsPage() {
                 Current plan
               </Text>
               <Text as="p" tone="subdued">
-                Billing is managed through Shopify.
+                Billing is managed entirely through Shopify.
               </Text>
             </BlockStack>
-            <Badge tone="info">{data.planName}</Badge>
+            <InlineStack gap="150">
+              {data.isTrialActive && data.trialEndsAt ? (
+                <Badge tone="info">{`Trial ends ${new Date(data.trialEndsAt).toLocaleDateString()}`}</Badge>
+              ) : null}
+              <Badge tone="success">{data.planName}</Badge>
+            </InlineStack>
           </InlineStack>
 
-          <Button disabled>Upgrade plan</Button>
-          <Text as="p" tone="subdued" variant="bodySm">
-            Paid plans aren&apos;t available yet — this app is currently free
-            while in local development.
-          </Text>
+          <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
+            <BlockStack gap="050">
+              <Text as="span" tone="subdued" variant="bodySm">
+                Billing cycle
+              </Text>
+              <Text as="span" variant="headingSm">
+                {data.billingCycle
+                  ? data.billingCycle === "MONTHLY"
+                    ? "Monthly"
+                    : "Yearly"
+                  : "—"}
+              </Text>
+            </BlockStack>
+            <BlockStack gap="050">
+              <Text as="span" tone="subdued" variant="bodySm">
+                Renewal date
+              </Text>
+              <Text as="span" variant="headingSm">
+                {data.currentPeriodEnd
+                  ? new Date(data.currentPeriodEnd).toLocaleDateString()
+                  : "—"}
+              </Text>
+            </BlockStack>
+          </InlineGrid>
+
+          <Button url="/app/plans">Manage plan</Button>
         </BlockStack>
       </Card>
 
@@ -89,7 +121,9 @@ export default function BillingSettingsPage() {
           </Text>
           <EmptyState heading="No invoices yet" image="">
             <p>
-              Invoices will appear here once billing is enabled for your plan.
+              Invoices are managed by Shopify and will appear in your{" "}
+              <Link to="/app/plans">Shopify billing settings</Link> once a
+              paid plan is active.
             </p>
           </EmptyState>
         </BlockStack>
