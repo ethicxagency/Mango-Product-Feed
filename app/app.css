@@ -1,5 +1,30 @@
 @import "tailwindcss";
 
+.mango-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--p-space-100);
+  text-align: right;
+}
+
+/* The footer must look identical on hover — no fade, no hidden content, no
+   color shift. This overrides any inherited hover behavior (e.g. from
+   Polaris's nav-item hover treatment) rather than relying on removing it
+   at the source, since plain divs/Text/img here don't opt into that
+   treatment themselves but can still inherit ambient hover CSS. */
+.mango-sidebar-footer,
+.mango-sidebar-footer *,
+.mango-sidebar-footer:hover,
+.mango-sidebar-footer:hover * {
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+  transition: none !important;
+  animation: none !important;
+}
+
 .toggle-switch {
   display: inline-flex;
   align-items: center;

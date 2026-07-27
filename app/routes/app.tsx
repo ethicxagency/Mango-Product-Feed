@@ -6,7 +6,7 @@ import {
   ListBulletedIcon,
 } from "@shopify/polaris-icons";
 import { boundary } from "@shopify/shopify-app-remix/server";
-import { Link, Outlet, useLocation, useRouteError } from "@remix-run/react";
+import { Outlet, useLocation, useRouteError } from "@remix-run/react";
 
 import { isMockModeEnabled } from "~/lib/mock-mode.server";
 import { authenticate } from "~/shopify.server";
@@ -46,22 +46,6 @@ export default function AppLayout() {
               flexDirection: "column",
             }}
           >
-            <Link
-              to="/app"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--p-space-200)",
-                padding:
-                  "var(--p-space-400) var(--p-space-300) var(--p-space-200)",
-                textDecoration: "none",
-              }}
-            >
-              <img src="/logo.png" alt="" width={28} height={28} />
-              <Text as="span" variant="headingSm">
-                Mango Product Feed
-              </Text>
-            </Link>
             <Navigation location={location.pathname}>
               <Navigation.Section
                 items={[
@@ -88,27 +72,18 @@ export default function AppLayout() {
             </Navigation>
           </div>
           <div
+            className="mango-sidebar-footer"
             style={{
               padding: "var(--p-space-400)",
               borderTop: "1px solid var(--p-color-border-secondary)",
-              textAlign: "center",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: "var(--p-space-150)",
-              }}
-            >
-              <img src="/logo.png" alt="" width={18} height={18} />
-              <Text as="p" variant="bodySm" fontWeight="medium">
-                Mango Product Feed
-              </Text>
-            </div>
+            <img src="/footer-logo.png" alt="" width={28} height={28} />
+            <Text as="p" variant="bodySm" fontWeight="medium">
+              Mango Product Feed
+            </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              Built by merchants, for merchants.
+              Built by Nextup Global, LLC for merchants.
             </Text>
           </div>
         </div>
