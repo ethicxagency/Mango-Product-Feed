@@ -144,11 +144,20 @@ export const subscriptionService = {
 
     const billingKey =
       billingCycle === "MONTHLY" ? plan.billing.monthlyKey : plan.billing.yearlyKey;
-    const { billing } = await authenticate.admin(request);
+    const returnUrl = buildBillingReturnUrl("/app/plans");
+    const { billing, session } = await authenticate.admin(request);
+
+    console.log("[billing] requesting subscription", {
+      shop: session.shop,
+      plan: billingKey,
+      isTest: BILLING_TEST_MODE,
+      returnUrl,
+    });
+
     await billing.request({
       plan: billingKey,
       isTest: BILLING_TEST_MODE,
-      returnUrl: buildBillingReturnUrl("/app/plans"),
+      returnUrl,
     });
   },
 

@@ -123,11 +123,45 @@ export async function action({ request }: ActionFunctionArgs) {
       { status: 400 },
     );
   } catch (error) {
-    if (error instanceof Response) throw error; // redirects propagate as-is
-    const message = error instanceof Error ? error.message : "Something went wrong";
+    // Genuine redirects — authenticate.admin() re-triggering OAuth, or
+    // billing.request()'s own redirect to Shopify's approval page — are
+    // Response objects with a 3xx status and MUST propagate untouched for
+    // Remix to actually perform the redirect. Anything >= 400 is a Response
+    // our own code threw deliberately (buildBillingReturnUrl's validation,
+    // the "unknown plan" check) and needs to become the same JSON error
+    // shape as every other failure below, not a raw bodyless response the
+    // fetcher can't show the merchant anything useful for.
+    if (error instanceof Response && error.status < 400) {
+      throw error;
+    }
+
+    const responseBody =
+      error instanceof Response ? await error.text().catch(() => null) : null;
+    // BillingError (thrown by @shopify/shopify-api when appSubscriptionCreate
+    // returns GraphQL userErrors) carries the actual Shopify-side reason on
+    // `errorData` — surface it in the logs, since error.message alone is
+    // usually just "Error while billing the store".
+    const billingErrorData =
+      error && typeof error === "object" && "errorData" in error
+        ? (error as { errorData: unknown }).errorData
+        : undefined;
+    const message =
+      responseBody ?? (error instanceof Error ? error.message : "Something went wrong");
+
+    console.error("[billing] Upgrade Plan action failed", {
+      shop: shop.shopifyDomain,
+      intent,
+      planId: formData.get("planId")?.toString(),
+      billingCycle: formData.get("billingCycle")?.toString(),
+      status: error instanceof Response ? error.status : undefined,
+      message,
+      billingErrorData,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
     return json<PlansActionResult>(
       { ok: false, message: null, error: message },
-      { status: 500 },
+      { status: error instanceof Response ? error.status : 500 },
     );
   }
 }

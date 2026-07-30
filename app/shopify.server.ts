@@ -114,6 +114,17 @@ const BILLING_PLANS: BillingConfig = {
 // returnUrl) uses this single resolved value instead of re-deriving it.
 export const appUrl = process.env.SHOPIFY_APP_URL ?? process.env.APP_URL ?? "";
 
+if (!appUrl && !isMockModeEnabled()) {
+  // Fails loudly at startup (in server logs, not as a mystery 500 on the
+  // first billing click) rather than silently shipping an empty appUrl
+  // that would only surface later as an invalid billing returnUrl.
+  console.error(
+    "[shopify.server] Neither SHOPIFY_APP_URL nor APP_URL is set — OAuth, " +
+      "webhooks, and Billing API calls will all fail. Set one in the " +
+      "environment (Render dashboard > Environment).",
+  );
+}
+
 const shopify = shopifyApp({
   apiKey,
   apiSecretKey,
