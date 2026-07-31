@@ -29,7 +29,10 @@ import {
   usageWarning,
 } from "~/lib/plans";
 import { billingService } from "~/services/billing.service.server";
-import { subscriptionService } from "~/services/subscription.service.server";
+import {
+  describeBillingError,
+  subscriptionService,
+} from "~/services/subscription.service.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const shop = await getCurrentShop(request);
@@ -62,6 +65,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       shop: shop.shopifyDomain,
       status: error instanceof Response ? error.status : undefined,
       message: error instanceof Error ? error.message : String(error),
+      hint: describeBillingError(error),
       billingErrorData,
       stack: error instanceof Error ? error.stack : undefined,
     });
@@ -186,6 +190,7 @@ export async function action({ request }: ActionFunctionArgs) {
       billingCycle: formData.get("billingCycle")?.toString(),
       status: error instanceof Response ? error.status : undefined,
       message,
+      hint: describeBillingError(error),
       billingErrorData,
       stack: error instanceof Error ? error.stack : undefined,
     });

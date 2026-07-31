@@ -1,4 +1,4 @@
-import type { AppSubscription } from "@shopify/shopify-api";
+import { HttpResponseError, type AppSubscription } from "@shopify/shopify-api";
 import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 
 import { db } from "~/lib/db.server";
@@ -24,6 +24,31 @@ import { appUrl, authenticate } from "~/shopify.server";
  * (Shopify never actually bills test charges). Flip via env var once the
  * app is genuinely live and approved for real billing. */
 const BILLING_TEST_MODE = process.env.SHOPIFY_BILLING_TEST_MODE !== "false";
+
+/**
+ * Turns a raw billing.request/check/cancel failure into an actionable log
+ * hint. A 403 Forbidden specifically on a Billing API GraphQL call (while
+ * every other authenticated call — sync, webhooks — succeeds) is Shopify's
+ * documented signature for "this app has Shopify Managed Pricing enabled
+ * in the Partner Dashboard", which disables custom appSubscriptionCreate/
+ * currentAppInstallation billing calls entirely in favor of Shopify's own
+ * pricing UI. Anything else just gets its raw HTTP status/body surfaced.
+ */
+export function describeBillingError(error: unknown): string | undefined {
+  if (!(error instanceof HttpResponseError)) return undefined;
+
+  if (error.response.code === 403) {
+    return (
+      "403 Forbidden from Shopify's Billing API. This is Shopify's " +
+      "documented signature for 'Managed Pricing' being enabled for this " +
+      "app in the Partner Dashboard (App setup > Pricing), which disables " +
+      "custom billing.request()/billing.check() calls — check that " +
+      "setting before assuming this is a code bug."
+    );
+  }
+
+  return `HTTP ${error.response.code} ${error.response.statusText} from Shopify's Billing API.`;
+}
 
 /**
  * Builds the absolute URL Shopify's Billing API requires for `returnUrl`.
