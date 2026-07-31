@@ -34,10 +34,41 @@ import { subscriptionService } from "~/services/subscription.service.server";
 export async function loader({ request }: LoaderFunctionArgs) {
   const shop = await getCurrentShop(request);
 
-  const current = await subscriptionService.verifySubscription({
-    request,
-    shopId: shop.id,
-  });
+  let current;
+  try {
+    current = await subscriptionService.verifySubscription({
+      request,
+      shopId: shop.id,
+    });
+  } catch (error) {
+    // billing.check() only auto-recovers from an expired session (401 ->
+    // redirect to reauth, which surfaces here as a low-status Response and
+    // must propagate). Anything else — a network blip, a GraphQL error, a
+    // Shopify-side hiccup — would otherwise crash this entire page with an
+    // unhelpful "Application Error" and no way to diagnose it. Log full
+    // detail and fall back to the last-known-good local state instead, so
+    // a transient Shopify API failure doesn't lock the merchant out of the
+    // Plans page entirely.
+    if (error instanceof Response && error.status < 400) {
+      throw error;
+    }
+
+    const billingErrorData =
+      error && typeof error === "object" && "errorData" in error
+        ? (error as { errorData: unknown }).errorData
+        : undefined;
+
+    console.error("[billing] verifySubscription failed on Plans page load", {
+      shop: shop.shopifyDomain,
+      status: error instanceof Response ? error.status : undefined,
+      message: error instanceof Error ? error.message : String(error),
+      billingErrorData,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    current = await subscriptionService.getCurrentPlan(shop.id);
+  }
+
   const summary = await billingService.getSummary(shop.id, current.plan.id);
 
   return json({
