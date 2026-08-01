@@ -106,4 +106,22 @@ export const webhookSyncService = {
       await sessionStorage.deleteSessions(sessions.map((s) => s.id));
     }
   },
+
+  /** shop/redact fires ~48h after uninstall and means "permanently erase
+   * this shop's data now" — unlike app/uninstalled, which deliberately
+   * keeps data in case of a quick reinstall. Deleting the Shop row cascades
+   * (onDelete: Cascade in schema.prisma) through every shop-scoped table:
+   * Product, Collection, Feed, Tag, Settings, Subscription, and their
+   * children. Session rows aren't a Prisma relation on Shop (keyed by shop
+   * domain string, not shopId), so those are cleaned up separately —
+   * though app/uninstalled already does this, it's repeated here so
+   * shop/redact is fully self-contained regardless of delivery order. */
+  async handleShopRedact(shopDomain: string): Promise<void> {
+    await db.shop.deleteMany({ where: { shopifyDomain: shopDomain } });
+
+    const sessions = await sessionStorage.findSessionsByShop(shopDomain);
+    if (sessions.length > 0) {
+      await sessionStorage.deleteSessions(sessions.map((s) => s.id));
+    }
+  },
 };

@@ -102,6 +102,10 @@ const TOPIC_LABELS: Record<string, string> = {
   COLLECTIONS_UPDATE: "collections/update",
   COLLECTIONS_DELETE: "collections/delete",
   APP_UNINSTALLED: "app/uninstalled",
+  APP_SUBSCRIPTIONS_UPDATE: "app_subscriptions/update",
+  CUSTOMERS_DATA_REQUEST: "customers/data_request",
+  CUSTOMERS_REDACT: "customers/redact",
+  SHOP_REDACT: "shop/redact",
 };
 
 export default function ApiWebhooksSettingsPage() {

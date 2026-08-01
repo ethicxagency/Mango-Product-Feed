@@ -34,6 +34,13 @@ export const WEBHOOK_TOPICS = {
   COLLECTIONS_DELETE: "/webhooks/collections/delete",
   APP_UNINSTALLED: "/webhooks/app/uninstalled",
   APP_SUBSCRIPTIONS_UPDATE: "/webhooks/app-subscriptions/update",
+  // Mandatory Shopify App Store compliance webhooks — required regardless
+  // of whether this app stores customer PII (it doesn't; see
+  // webhooks.customers.data_request.tsx / .redact.tsx for why those are
+  // legitimate no-ops rather than stubs).
+  CUSTOMERS_DATA_REQUEST: "/webhooks/customers/data_request",
+  CUSTOMERS_REDACT: "/webhooks/customers/redact",
+  SHOP_REDACT: "/webhooks/shop/redact",
 } as const;
 
 // Shopify Managed Billing plan catalog — one entry per paid plan × billing
