@@ -28,3 +28,5 @@ services:
         value: read_products,read_inventory
       - key: MOCK_SHOPIFY
         value: "false"
+      - key: SHOPIFY_BILLING_TEST
+        value: "false"

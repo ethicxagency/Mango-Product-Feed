@@ -20,10 +20,10 @@ import { appUrl, authenticate } from "~/shopify.server";
  * see shopify.server.ts and getCurrentShop.
  */
 
-/** Development stores and apps not yet public should charge in test mode
- * (Shopify never actually bills test charges). Flip via env var once the
- * app is genuinely live and approved for real billing. */
-const BILLING_TEST_MODE = process.env.SHOPIFY_BILLING_TEST_MODE !== "false";
+/** Dev stores must charge in test mode (Shopify rejects/never bills real
+ * charges on dev stores otherwise). No hardcoding — driven by env var:
+ * .env: SHOPIFY_BILLING_TEST=true. Render prod: SHOPIFY_BILLING_TEST=false. */
+const isBillingTestMode = () => process.env.SHOPIFY_BILLING_TEST === "true";
 
 /**
  * Turns a raw billing.request/check/cancel failure into an actionable log
@@ -34,6 +34,50 @@ const BILLING_TEST_MODE = process.env.SHOPIFY_BILLING_TEST_MODE !== "false";
  * currentAppInstallation billing calls entirely in favor of Shopify's own
  * pricing UI. Anything else just gets its raw HTTP status/body surfaced.
  */
+/** Dev store detection — shop.plan.partnerDevelopment true for Partner
+ * dev stores. Logging only; does NOT drive isTest (that's env-var only,
+ * per spec — never hardcode). Fails soft (undefined) so a query hiccup
+ * never blocks the actual billing call. */
+async function detectDevStore(admin: AdminApiContext): Promise<boolean | undefined> {
+  try {
+    const res = await admin.graphql(
+      `#graphql
+      query ShopPlan { shop { plan { partnerDevelopment } } }`,
+    );
+    const { data } = (await res.json()) as {
+      data?: { shop?: { plan?: { partnerDevelopment?: boolean } } };
+    };
+    return data?.shop?.plan?.partnerDevelopment;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Full GraphQL error body on a billing failure — not just "GraphQL
+ * Client: Forbidden". HttpResponseError.response.body carries Shopify's
+ * actual errors array; log it whole. */
+async function logBillingGraphQLError(
+  op: string,
+  shop: string,
+  error: unknown,
+): Promise<void> {
+  if (error instanceof HttpResponseError) {
+    console.error(`[billing] ${op} failed`, {
+      shop,
+      status: error.response.code,
+      statusText: error.response.statusText,
+      body: JSON.stringify(error.response.body),
+      hint: describeBillingError(error),
+    });
+  } else {
+    console.error(`[billing] ${op} failed`, {
+      shop,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+  }
+}
+
 export function describeBillingError(error: unknown): string | undefined {
   if (!(error instanceof HttpResponseError)) return undefined;
 
@@ -170,20 +214,29 @@ export const subscriptionService = {
     const billingKey =
       billingCycle === "MONTHLY" ? plan.billing.monthlyKey : plan.billing.yearlyKey;
     const returnUrl = buildBillingReturnUrl("/app/plans");
-    const { billing, session } = await authenticate.admin(request);
+    const { billing, session, admin } = await authenticate.admin(request);
+    const isTest = isBillingTestMode();
 
     console.log("[billing] requesting subscription", {
       shop: session.shop,
       plan: billingKey,
-      isTest: BILLING_TEST_MODE,
       returnUrl,
+      isTest,
+      sessionType: session.isOnline ? "online" : "offline",
+      accessTokenPresent: Boolean(session.accessToken),
+      isDevStore: await detectDevStore(admin),
     });
 
-    await billing.request({
-      plan: billingKey,
-      isTest: BILLING_TEST_MODE,
-      returnUrl,
-    });
+    try {
+      await billing.request({
+        plan: billingKey,
+        isTest,
+        returnUrl,
+      });
+    } catch (error) {
+      await logBillingGraphQLError("billing.request", session.shop, error);
+      throw error;
+    }
   },
 
   /** Cancels the shop's active Shopify subscription (if any) and reverts
@@ -240,8 +293,24 @@ export const subscriptionService = {
       return subscriptionService.getCurrentPlan(shopId);
     }
 
-    const { billing } = await authenticate.admin(request);
-    const { appSubscriptions } = await billing.check({ isTest: BILLING_TEST_MODE });
+    const { billing, session, admin } = await authenticate.admin(request);
+    const isTest = isBillingTestMode();
+
+    console.log("[billing] checking subscription", {
+      shop: session.shop,
+      isTest,
+      sessionType: session.isOnline ? "online" : "offline",
+      accessTokenPresent: Boolean(session.accessToken),
+      isDevStore: await detectDevStore(admin),
+    });
+
+    let appSubscriptions;
+    try {
+      ({ appSubscriptions } = await billing.check({ isTest }));
+    } catch (error) {
+      await logBillingGraphQLError("billing.check", session.shop, error);
+      throw error;
+    }
 
     const active = appSubscriptions.find(
       (sub) => sub.status === "ACTIVE" || sub.status === "ACCEPTED",
@@ -279,7 +348,7 @@ export const subscriptionService = {
     const { billing } = await authenticate.admin(request);
     return billing.require({
       plans,
-      isTest: BILLING_TEST_MODE,
+      isTest: isBillingTestMode(),
       onFailure,
     });
   },
