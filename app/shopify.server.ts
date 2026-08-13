@@ -34,14 +34,20 @@ export const WEBHOOK_TOPICS = {
   COLLECTIONS_DELETE: "/webhooks/collections/delete",
   APP_UNINSTALLED: "/webhooks/app/uninstalled",
   APP_SUBSCRIPTIONS_UPDATE: "/webhooks/app-subscriptions/update",
-  // Mandatory Shopify App Store compliance webhooks — required regardless
-  // of whether this app stores customer PII (it doesn't; see
-  // webhooks.customers.data_request.tsx / .redact.tsx for why those are
-  // legitimate no-ops rather than stubs).
-  CUSTOMERS_DATA_REQUEST: "/webhooks/customers/data_request",
-  CUSTOMERS_REDACT: "/webhooks/customers/redact",
-  SHOP_REDACT: "/webhooks/shop/redact",
 } as const;
+
+// Mandatory compliance webhooks (customers/data_request, customers/redact,
+// shop/redact) are NOT registered here. They use a different mechanism from
+// the shop-specific topics above: no "compliance" concept exists anywhere
+// in @shopify/shopify-app-remix or @shopify/shopify-api (verified — zero
+// matches in either package's source), because webhookSubscriptionCreate
+// (what registerWebhooks() calls per-shop in afterAuth) doesn't accept
+// these topics at all. They're app-level, declared once in
+// shopify.app.toml's [[webhooks.subscriptions]] compliance_topics and
+// pushed via `shopify app deploy` — see that file. The route handlers
+// (webhooks.customers.data_request.tsx, webhooks.customers.redact.tsx,
+// webhooks.shop.redact.tsx) are unchanged and still correct; they just
+// were never reachable because nothing had them subscribed with Shopify.
 
 // Shopify Managed Billing plan catalog — one entry per paid plan × billing
 // cycle (STARTER_MONTHLY, STARTER_YEARLY, GROWTH_MONTHLY, ...). Prices/trial
