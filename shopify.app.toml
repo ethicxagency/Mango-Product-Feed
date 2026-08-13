@@ -2,7 +2,7 @@
 
 client_id = "10cb2fc0804731facb9113ccd99f2f22"
 name = "Mango Product Feed"
-application_url = "https://mango-product-feed.onrender.com"
+application_url = "https://app.mangofeed.nextupglobal.net"
 embedded = true
 
 [webhooks]
@@ -20,4 +20,4 @@ use_legacy_install_flow = false
 # This app's authPathPrefix (app/shopify.server.ts) is "/auth", so
 # "/auth/callback" is the only OAuth callback route it actually serves.
 [auth]
-redirect_urls = ["https://mango-product-feed.onrender.com/auth/callback"]
+redirect_urls = ["https://app.mangofeed.nextupglobal.net/auth/callback"]
