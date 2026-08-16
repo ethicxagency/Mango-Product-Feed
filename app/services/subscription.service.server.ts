@@ -1,4 +1,8 @@
-import { HttpResponseError, type AppSubscription } from "@shopify/shopify-api";
+import {
+  BillingError,
+  HttpResponseError,
+  type AppSubscription,
+} from "@shopify/shopify-api";
 import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 
 import { db } from "~/lib/db.server";
@@ -68,6 +72,15 @@ async function logBillingGraphQLError(
       statusText: error.response.statusText,
       body: JSON.stringify(error.response.body),
       hint: describeBillingError(error),
+    });
+  } else if (error instanceof BillingError) {
+    // Thrown when appSubscriptionCreate/appPurchaseOneTimeCreate executed
+    // and Shopify returned real GraphQL userErrors (not a transport/403
+    // failure) — error.errorData IS that userErrors array.
+    console.error(`[billing] ${op} failed`, {
+      shop,
+      message: error.message,
+      userErrors: JSON.stringify(error.errorData),
     });
   } else {
     console.error(`[billing] ${op} failed`, {
