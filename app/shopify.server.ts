@@ -151,6 +151,18 @@ const shopify = shopifyApp({
   sessionStorage: new PrismaSessionStorage(db),
   distribution: AppDistribution.AppStore,
   billing: BILLING_PLANS,
+  // Required for public apps created on/after April 1 2026. Fully
+  // library-handled: OAuth callback requests expiring: true (both
+  // auth-code-flow.mjs and token-exchange.mjs already read this flag —
+  // verified in installed 4.2.1 source), and
+  // ensure-offline-token-is-not-expired.mjs auto-refreshes and persists via
+  // sessionStorage.storeSession() whenever a session is <5min from expiry.
+  // No manual refresh code needed or added — Session model already has
+  // refreshToken/refreshTokenExpires/expires columns (schema.prisma), so no
+  // migration needed either.
+  future: {
+    expiringOfflineAccessTokens: true,
+  },
   webhooks: Object.fromEntries(
     Object.entries(WEBHOOK_TOPICS).map(([topic, callbackUrl]) => [
       topic,
