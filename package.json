@@ -10,7 +10,7 @@
   "scripts": {
     "build": "prisma generate && remix vite:build",
     "dev": "remix vite:dev",
-    "start": "prisma migrate deploy && remix-serve ./build/server/index.js",
+    "start": "node scripts/start.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",

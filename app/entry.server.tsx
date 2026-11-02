@@ -10,6 +10,20 @@ import { addDocumentResponseHeaders } from "~/shopify.server";
 
 export const streamTimeout = 5_000;
 
+/** Logs every unhandled loader/action/render error server-side (message only
+ *  — never request bodies, headers, cookies, or connection strings). */
+export function handleError(error: unknown, { request }: { request: Request }) {
+  if (request.signal.aborted) return;
+  const message =
+    error instanceof Error
+      ? (error.message.split("\n")[0] ?? "")
+      : String(error);
+  console.error(
+    `[remix] unhandled error on ${request.method} ${new URL(request.url).pathname}:`,
+    message.replace(/postgres(ql)?:\/\/\S+/gi, "postgresql://[redacted]"),
+  );
+}
+
 export default function handleRequest(
   request: Request,
   responseStatusCode: number,

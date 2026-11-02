@@ -171,7 +171,19 @@ const shopify = shopifyApp({
   ),
   hooks: {
     afterAuth: async ({ session, admin }) => {
-      await shopify.registerWebhooks({ session });
+      // Webhook registration must not be able to block/fail the install:
+      // the merchant can still use the app and webhooks can be re-registered
+      // from Settings > API & Webhooks.
+      try {
+        await shopify.registerWebhooks({ session });
+      } catch (error) {
+        console.error(
+          "[afterAuth] webhook registration failed:",
+          error instanceof Error ? error.message.split("\n")[0] : "unknown error",
+        );
+      }
+      // Registers the shop (fast) and starts the catalog sync in the
+      // BACKGROUND — the OAuth callback redirects to the app immediately.
       await runInitialSync(session, admin);
     },
   },

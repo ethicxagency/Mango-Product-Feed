@@ -1,8 +1,10 @@
-import type { LoaderFunctionArgs } from "@remix-run/node";
+import { useEffect } from "react";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useFetcher, useLoaderData, useRevalidator } from "@remix-run/react";
 import {
   Badge,
+  Banner,
   BlockStack,
   Box,
   Card,
@@ -31,13 +33,88 @@ import { QuickActionCard } from "~/components/dashboard/QuickActionCard";
 import { formatDuration, formatRelativeTime } from "~/lib/format";
 import { getCurrentShop } from "~/lib/current-shop.server";
 import { FEED_CHANNEL_LABELS } from "~/lib/feed-channels";
+import { isMockModeEnabled } from "~/lib/mock-mode.server";
 import { getDashboardSummary } from "~/services/dashboard.service.server";
+import { startCatalogSync } from "~/services/shopify/initial-sync.server";
+import { authenticate } from "~/shopify.server";
 import type { FeedChannel } from "~/types/feed";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const shop = await getCurrentShop(request);
   const summary = await getDashboardSummary(shop.id);
-  return json({ summary });
+  return json({
+    summary,
+    sync: { status: shop.lastSyncStatus, error: shop.lastSyncError },
+  });
+}
+
+/** Retry a failed (or stalled) catalog sync. startCatalogSync claims the sync
+ *  atomically, so double-clicks and concurrent retries never run it twice. */
+export async function action({ request }: ActionFunctionArgs) {
+  const shop = await getCurrentShop(request);
+  const form = await request.formData();
+  if (form.get("intent") !== "retry-sync") {
+    return json({ ok: false, result: "unknown-intent" }, { status: 400 });
+  }
+  if (isMockModeEnabled()) return json({ ok: true, result: "mock" });
+
+  const { admin } = await authenticate.admin(request);
+  const result = await startCatalogSync(shop.id, admin);
+  return json({ ok: true, result });
+}
+
+function SyncStatusBanner({
+  status,
+  error,
+}: {
+  status: string | null;
+  error: string | null;
+}) {
+  const fetcher = useFetcher<typeof action>();
+  const revalidator = useRevalidator();
+
+  // While the background sync runs, poll the loader so the banner (and the
+  // product counts) update on their own without a manual refresh.
+  useEffect(() => {
+    if (status !== "RUNNING") return;
+    const id = setInterval(() => revalidator.revalidate(), 4000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  if (status === "RUNNING") {
+    return (
+      <Banner tone="info" title="Syncing your products">
+        <p>
+          We&apos;re importing your catalog from Shopify in the background. You
+          can keep using the app — numbers update automatically as it
+          progresses.
+        </p>
+      </Banner>
+    );
+  }
+
+  if (status === "FAILED") {
+    return (
+      <Banner
+        tone="critical"
+        title="Product sync failed"
+        action={{
+          content: "Retry sync",
+          loading: fetcher.state !== "idle",
+          onAction: () =>
+            fetcher.submit({ intent: "retry-sync" }, { method: "post" }),
+        }}
+      >
+        <p>
+          {error ?? "Something went wrong while importing your products."} No
+          product data was lost — retrying picks up where it left off.
+        </p>
+      </Banner>
+    );
+  }
+
+  return null;
 }
 
 const HISTORY_STATUS_TONE: Record<string, BadgeProps["tone"]> = {
@@ -48,7 +125,7 @@ const HISTORY_STATUS_TONE: Record<string, BadgeProps["tone"]> = {
 };
 
 export default function Dashboard() {
-  const { summary } = useLoaderData<typeof loader>();
+  const { summary, sync } = useLoaderData<typeof loader>();
   const feedStatusTone = summary.lastGenerationStatus
     ? HISTORY_STATUS_TONE[summary.lastGenerationStatus]
     : undefined;
@@ -59,6 +136,7 @@ export default function Dashboard() {
       subtitle="Manage your product feeds across multiple channels."
     >
       <BlockStack gap="600">
+        <SyncStatusBanner status={sync.status} error={sync.error} />
         <BlockStack gap="300">
           <Text as="h2" variant="headingSm" tone="subdued">
             Overview

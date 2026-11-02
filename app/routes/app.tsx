@@ -1,12 +1,17 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { Frame, Navigation, Text } from "@shopify/polaris";
+import { Banner, Button, Frame, Navigation, Page, Text } from "@shopify/polaris";
 import {
   CreditCardIcon,
   HomeIcon,
   ListBulletedIcon,
 } from "@shopify/polaris-icons";
 import { boundary } from "@shopify/shopify-app-remix/server";
-import { Outlet, useLocation, useRouteError } from "@remix-run/react";
+import {
+  isRouteErrorResponse,
+  Outlet,
+  useLocation,
+  useRouteError,
+} from "@remix-run/react";
 
 import { isMockModeEnabled } from "~/lib/mock-mode.server";
 import { authenticate } from "~/shopify.server";
@@ -107,8 +112,31 @@ export default function AppLayout() {
 // authenticate.admin() issues when a session expires) with their embedded
 // CSP headers intact, instead of Remix's default error handling dropping
 // them.
+//
+// Only genuine route/Response errors go to Shopify's boundary — it re-throws
+// anything else (e.g. a Prisma P1001 when the database is down), which used
+// to leave the merchant on a blank/"Application Error" page. Those now get a
+// clear, retryable message instead.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+
+  if (isRouteErrorResponse(error)) {
+    return boundary.error(error);
+  }
+
+  return (
+    <Page title="Something went wrong">
+      <Banner tone="critical" title="We couldn't load this page">
+        <p>
+          The app hit a temporary problem (for example, a database or network
+          interruption). Your data is safe. Please try again in a moment.
+        </p>
+        <div style={{ marginTop: "var(--p-space-300)" }}>
+          <Button onClick={() => window.location.reload()}>Reload</Button>
+        </div>
+      </Banner>
+    </Page>
+  );
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
